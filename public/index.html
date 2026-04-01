@@ -1,0 +1,641 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>بضاعة بلدي</title>
+  <link rel="stylesheet" href="/styles.css" />
+</head>
+<body>
+  <div class="app-shell">
+    <header class="topbar site-header">
+      <div class="container topbar-inner">
+        <a href="/" class="brand" id="brandHomeLink" data-route="/">
+          <span class="brand-mark brand-badge">س</span>
+          <div class="brand-copy">
+            <div class="brand-title brand-text" id="siteBrandTitle">بضاعة بلدي</div>
+            <small class="muted" id="siteBrandTagline">سوق محلي بتجربة عرض أهدأ وأكثر احترافية</small>
+          </div>
+        </a>
+
+        <form class="searchbar searchbar-glow" id="globalSearchForm">
+          <input
+            id="globalSearchInput"
+            type="search"
+            placeholder="ابحث عن حلويات، أعمال يدوية، منتجات منزلية، هدايا..."
+          />
+          <button class="btn btn-secondary" type="submit">بحث</button>
+        </form>
+
+        <div class="nav-actions header-nav-row">
+          <button class="btn btn-outline" id="navLoginBtn">تسجيل الدخول</button>
+          <button class="btn btn-primary" id="navAddProductBtn">إضافة منتج</button>
+          <button class="btn btn-light hidden" id="navProfileBtn">الملف الشخصي</button>
+          <button class="btn btn-light hidden" id="navMessagesBtn">المحادثات<span id="navMessagesBadge" class="cart-badge hidden">0</span></button>
+          <button class="btn btn-light hidden" id="navNotificationsBtn">الإشعارات<span id="navNotificationsBadge" class="cart-badge hidden">0</span></button>
+          <button class="btn btn-light hidden" id="navFavoritesBtn">المفضلة<span id="navFavoritesBadge" class="cart-badge hidden">0</span></button>
+          <button class="btn btn-light hidden cart-nav-btn" id="navCartBtn">السلة<span id="navCartBadge" class="cart-badge hidden">0</span></button>
+          <button class="btn btn-light hidden" id="navOrdersBtn">الطلبات<span id="navOrdersBadge" class="cart-badge hidden">0</span></button>
+          <button class="btn btn-light hidden" id="navAdminBtn">الإدارة</button>
+          <button class="btn btn-light hidden" id="navDashboardBtn">لوحتي</button>
+          <button class="btn btn-outline hidden" id="navLogoutBtn">خروج</button>
+        </div>
+      </div>
+    </header>
+
+    <main class="container main-space">
+      <section id="homeView" class="view active">
+        <section class="hero hero-compact hero-bleed">
+          <div class="hero-card hero-poster">
+            <div class="hero-overlay"></div>
+            <div class="hero-shell">
+              <div class="hero-text">
+                <div class="hero-kicker" id="heroKicker">منصة محلية متجددة</div>
+                <h1 id="heroTitle">بضاعة بلدي</h1>
+                <p id="heroDescription">
+                  مساحة عرض أوسع للتجار والمزارعين والحرفيين، مع تصنيفات واضحة،
+                  بطاقات أوضح، ومحادثات أبسط للوصول إلى المنتج المناسب بسرعة.
+                </p>
+              </div>
+              <div class="hero-media-frame">
+                <div class="hero-media-art" id="heroPosterMedia" aria-hidden="true"></div>
+              </div>
+            </div>
+          </div>
+        </section>
+
+        <section class="section">
+          <div class="filters-shell">
+            <div class="filters-bar">
+              <input class="field" id="filterKeyword" placeholder="كلمة مفتاحية" />
+              <select id="filterCategory" class="field"></select>
+              <select id="filterRegion" class="field"></select>
+              <select id="sortBy" class="field">
+                <option value="newest">الأحدث</option>
+                <option value="priceAsc">السعر تصاعدي</option>
+                <option value="priceDesc">السعر تنازلي</option>
+                <option value="views">الأكثر مشاهدة</option>
+              </select>
+              <button class="btn btn-secondary" id="applyFiltersBtn" type="button">
+                تطبيق
+              </button>
+            </div>
+
+            <div class="chips chips-persistent" id="categoryChips"></div>
+          </div>
+        </section>
+
+        <section class="section">
+          <div id="resultsCount" class="hidden" aria-hidden="true">0 منتج</div>
+          <div id="homeCategorySections"></div>
+        </section>
+      </section>
+
+      <section id="catalogView" class="view hidden">
+        <div class="section-head">
+          <div>
+            <h2 id="catalogTitle">كل المنتجات</h2>
+            <p class="muted" id="catalogCount">0 منتج</p>
+          </div>
+
+          <div class="nav-actions">
+            <button class="btn btn-light" id="catalogBackBtn" type="button">
+              عودة للرئيسية
+            </button>
+          </div>
+        </div>
+
+        <div class="catalog-grid" id="catalogGrid"></div>
+      </section>
+
+      <section id="productView" class="view hidden">
+        <div class="section-head">
+          <div>
+            <h2 id="productViewTitle">تفاصيل المنتج</h2>
+            <p class="muted">مراجعة معلومات المنتج ثم اختيار الكمية المناسبة قبل الإضافة إلى السلة.</p>
+          </div>
+
+          <div class="nav-actions">
+            <button class="btn btn-light" id="productBackBtn" type="button">
+              عودة
+            </button>
+          </div>
+        </div>
+
+        <div id="productViewContent"></div>
+
+        <section class="section">
+          <div class="section-head">
+            <div>
+              <h3>منتجات ذات صلة</h3>
+              <p class="muted">منتجات أخرى من نفس التصنيف أو من نفس البائع.</p>
+            </div>
+          </div>
+
+          <div id="relatedProductsGrid" class="catalog-grid"></div>
+        </section>
+      </section>
+
+      <section id="authView" class="view hidden">
+        <div class="two-cols">
+          <div class="card">
+            <h2>تسجيل الدخول</h2>
+            <form id="loginForm" class="form-grid">
+              <input
+                class="field"
+                id="loginIdentifier"
+                placeholder="الهاتف أو البريد"
+                required
+              />
+              <input
+                class="field"
+                id="loginPassword"
+                type="password"
+                placeholder="كلمة المرور"
+                required
+              />
+              <button class="btn btn-secondary" type="submit">دخول</button>
+            </form>
+
+            <div class="mini-note">
+              <strong>حسابات تجريبية:</strong>
+              <div>بائع: rana@example.com / 12345678</div>
+              <div>مشتري: buyer@example.com / 12345678</div>
+              <div>مشرف: admin@example.com / 12345678</div>
+            </div>
+          </div>
+
+          <div class="card">
+            <h2>إنشاء حساب</h2>
+            <form id="registerForm" class="form-grid">
+              <select class="field" id="registerRole">
+                <option value="buyer">مشتري</option>
+                <option value="seller">بائع</option>
+              </select>
+
+              <input
+                class="field"
+                id="registerFullName"
+                placeholder="الاسم الكامل"
+                required
+              />
+              <input
+                class="field"
+                id="registerStoreName"
+                placeholder="اسم المتجر للبائع فقط"
+              />
+              <input
+                class="field"
+                id="registerPhone"
+                placeholder="رقم الهاتف"
+                required
+              />
+              <input
+                class="field"
+                id="registerEmail"
+                placeholder="البريد الإلكتروني"
+              />
+              <input
+                class="field"
+                id="registerRegion"
+                placeholder="المنطقة"
+                required
+              />
+              <input
+                class="field"
+                id="registerPassword"
+                type="password"
+                placeholder="كلمة المرور"
+                required
+              />
+              <textarea
+                class="field"
+                id="registerDescription"
+                placeholder="وصف مختصر"
+              ></textarea>
+
+              <button class="btn btn-primary" type="submit">إنشاء الحساب</button>
+            </form>
+          </div>
+        </div>
+      </section>
+
+      <section id="profileView" class="view hidden">
+        <div class="two-cols profile-layout">
+          <div class="card">
+            <h2>الملف الشخصي</h2>
+            <div id="profileSummary"></div>
+          </div>
+
+          <div class="card">
+            <h2>تعديل البيانات</h2>
+            <form id="profileForm" class="form-grid">
+              <input class="field" id="profileFullName" placeholder="الاسم الكامل" />
+              <input class="field" id="profileStoreName" placeholder="اسم المتجر" />
+              <input class="field" id="profileRegion" placeholder="المنطقة" />
+              <input class="field" id="profileAddress" placeholder="العنوان" />
+              <input class="field" id="profileWhatsapp" placeholder="واتساب" />
+              <textarea
+                class="field"
+                id="profileDescription"
+                placeholder="وصف مختصر"
+              ></textarea>
+              <button class="btn btn-secondary" type="submit">حفظ التعديلات</button>
+            </form>
+
+            <hr class="sep" />
+
+            <h3>صورة الحساب</h3>
+            <form id="avatarForm" class="form-grid">
+              <input
+                class="field"
+                id="avatarFile"
+                type="file"
+                accept=".jpg,.jpeg,.png,.webp"
+              />
+              <button class="btn btn-primary" type="submit">رفع الصورة</button>
+            </form>
+          </div>
+        </div>
+      </section>
+
+      <section id="favoritesView" class="view hidden">
+        <div class="section-head">
+          <div>
+            <h2>المفضلة</h2>
+            <p class="muted">المنتجات التي حفظتها للعودة إليها بسرعة.</p>
+          </div>
+          <button class="btn btn-light" id="refreshFavoritesBtn" type="button">تحديث</button>
+        </div>
+        <div id="favoritesGrid" class="catalog-grid"></div>
+      </section>
+
+      <section id="cartView" class="view hidden">
+        <div class="section-head">
+          <div>
+            <h2>السلة</h2>
+            <p class="muted">راجع العناصر والكميات ثم انتقل إلى إتمام الشراء بخطوات واضحة وبسيطة.</p>
+          </div>
+          <div class="nav-actions">
+            <button class="btn btn-light" id="refreshCartBtn" type="button">تحديث</button>
+            <button class="btn btn-outline" id="clearCartBtn" type="button">تفريغ السلة</button>
+          </div>
+        </div>
+        <div class="two-cols cart-layout">
+          <div class="card">
+            <div id="cartItemsList" class="list-stack"></div>
+          </div>
+          <div class="card">
+            <h3>ملخص السلة</h3>
+            <div id="cartSummaryPanel"></div>
+            <div class="nav-actions" style="margin-top:14px;">
+              <button class="btn btn-primary" id="submitCartOrderBtn" type="button">متابعة الشراء</button>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <section id="checkoutView" class="view hidden">
+        <div class="section-head">
+          <div>
+            <h2>إتمام الشراء</h2>
+            <p class="muted">راجع طلبك وأضف ملاحظاتك ثم أكد الإرسال للتاجر.</p>
+          </div>
+          <div class="nav-actions">
+            <button class="btn btn-light" id="checkoutBackBtn" type="button">العودة إلى السلة</button>
+          </div>
+        </div>
+        <div class="two-cols checkout-layout">
+          <div class="card">
+            <h3>العناصر المطلوبة</h3>
+            <div id="checkoutItemsList" class="list-stack"></div>
+          </div>
+          <div class="card">
+            <h3>تأكيد الطلب</h3>
+            <div id="checkoutSummaryPanel"></div>
+            <div class="checkout-form-grid">
+              <div class="detail-card-block">
+                <div class="detail-card-title">بيانات المستلم</div>
+                <div id="checkoutProfileInfo" class="detail-rows"></div>
+              </div>
+              <label class="field-stack" for="checkoutNotes">
+                <span>ملاحظات إضافية</span>
+                <textarea id="checkoutNotes" class="field" rows="5" placeholder="مثل وقت مناسب للتواصل أو تفاصيل الاستلام"></textarea>
+              </label>
+              <button class="btn btn-primary btn-block" id="confirmCheckoutBtn" type="button">تأكيد الطلب وإرساله</button>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <section id="ordersView" class="view hidden">
+        <div class="section-head">
+          <div>
+            <h2>الطلبات</h2>
+            <p class="muted">متابعة طلبات الشراء ومعرفة ما إذا قبلها التاجر أو رفضها.</p>
+          </div>
+          <button class="btn btn-light" id="refreshOrdersBtn" type="button">تحديث</button>
+        </div>
+        <div class="two-cols orders-layout">
+          <div class="card">
+            <div id="ordersList" class="list-stack"></div>
+          </div>
+          <div class="card">
+            <h3>تفاصيل الطلب</h3>
+            <div id="orderDetailsPanel" class="conversation-empty">اختر طلبًا لعرض تفاصيله</div>
+          </div>
+        </div>
+      </section>
+
+      <section id="dashboardView" class="view hidden">
+        <div class="section-head">
+          <h2>لوحة البائع</h2>
+          <div id="dashboardUserInfo" class="muted"></div>
+        </div>
+
+        <div class="stats-grid" id="statsGrid"></div>
+
+        <div class="card">
+          <div class="section-head">
+            <h3>منتجاتي</h3>
+            <button class="btn btn-primary" id="openAddProductFromDashboard" type="button">
+              إضافة منتج
+            </button>
+          </div>
+
+          <div id="myProductsGrid" class="catalog-grid compact-grid"></div>
+        </div>
+      </section>
+
+      <section id="sellerView" class="view hidden">
+        <div class="card seller-header-card">
+          <div class="seller-summary" id="sellerSummary"></div>
+        </div>
+
+        <div class="card seller-feedback-card">
+          <div class="section-head">
+            <h3 class="section-pill-title">آراء العملاء</h3>
+            <div class="muted small-label">أحدث التقييمات على المتجر</div>
+          </div>
+          <div id="sellerRatingsList" class="seller-ratings-strip"></div>
+        </div>
+
+        <div class="card seller-products-card">
+          <div class="section-head">
+            <h3 class="section-pill-title">منتجات المتجر</h3>
+            <div class="muted small-label">عرض كامل على مستوى الشاشة</div>
+          </div>
+          <div id="sellerProductsGrid" class="catalog-grid seller-products-wide"></div>
+        </div>
+      </section>
+
+      <section id="messagesView" class="view hidden">
+        <div class="messages-shell whatsapp-shell">
+          <aside class="messages-sidebar card conversations-card">
+            <div class="section-head messages-head">
+              <div>
+                <h3>المحادثات</h3>
+                <p class="muted">قائمة جانبية سريعة على نمط أكثر قربًا من تطبيقات الدردشة</p>
+              </div>
+              <button class="btn btn-light" id="refreshConversationsBtn" type="button">
+                تحديث
+              </button>
+            </div>
+
+            <div class="messages-search-wrap">
+              <input class="field messages-search" id="conversationQuickSearch" placeholder="ابحث داخل المحادثات" />
+            </div>
+
+            <div id="conversationsList" class="list-stack conversations-list"></div>
+          </aside>
+
+          <section class="card messages-main-card whatsapp-main">
+            <div id="conversationDetails" class="conversation-empty">
+              اختر محادثة لعرض الرسائل
+            </div>
+          </section>
+        </div>
+      </section>
+
+      <section id="notificationsView" class="view hidden">
+        <div class="section-head">
+          <div>
+            <h2>مركز الإشعارات</h2>
+            <p class="muted">كل التحديثات المهمة المتعلقة بالطلبات والرسائل والبلاغات والحساب.</p>
+          </div>
+          <div class="nav-actions">
+            <button class="btn btn-light" id="refreshNotificationsBtn" type="button">تحديث</button>
+            <button class="btn btn-outline" id="markAllNotificationsBtn" type="button">تعيين الكل كمقروء</button>
+          </div>
+        </div>
+        <div class="card">
+          <div id="notificationsList" class="list-stack"></div>
+        </div>
+      </section>
+
+      <section id="adminView" class="view hidden">
+        <div class="two-cols">
+          <div class="card">
+            <div class="section-head">
+              <h3>إدارة المستخدمين</h3>
+              <button class="btn btn-light" id="refreshAdminUsers" type="button">
+                تحديث
+              </button>
+            </div>
+
+            <div id="adminUsersList" class="list-stack"></div>
+          </div>
+
+          <div class="card">
+            <div class="section-head">
+              <h3>إدارة المنتجات</h3>
+              <button class="btn btn-light" id="refreshAdminProducts" type="button">
+                تحديث
+              </button>
+            </div>
+
+            <div id="adminProductsList" class="list-stack"></div>
+          </div>
+        </div>
+      </section>
+    </main>
+
+    <footer class="site-footer">
+      <div class="container footer-grid">
+        <div>
+          <div class="footer-title">بضاعة بلدي</div>
+          <p>منصة سوق محلي بواجهة أنظف، تصفح أسرع، وسهولة أكبر في الوصول إلى المنتجات والبائعين.</p>
+        </div>
+        <div>
+          <div class="footer-title">التصفح</div>
+          <a href="#home">الرئيسية</a><br />
+          <a href="#catalog">المنتجات</a><br />
+          <a href="#messages">المحادثات</a>
+        </div>
+        <div>
+          <div class="footer-title">الحساب</div>
+          <a href="#profile">الملف الشخصي</a><br />
+          <a href="#favorites">المفضلة</a><br />
+          <a href="#orders">الطلبات</a>
+        </div>
+        <div>
+          <div class="footer-title">الدعم</div>
+          <a href="#" data-content-key="contact_info">تواصل معنا</a><br />
+          <a href="#" data-content-key="privacy_policy">الخصوصية</a><br />
+          <a href="#" data-content-key="terms_of_use">الشروط</a><br />
+          <a href="#" data-content-key="faq">الأسئلة الشائعة</a>
+        </div>
+      </div>
+      <div class="container footer-bottom">
+        <span id="footerYearText">© 2026 بضاعة بلدي. جميع الحقوق محفوظة.</span>
+      </div>
+    </footer>
+  </div>
+
+  <button id="supportFloatingBtn" class="support-floating-btn" type="button" aria-label="الدعم الفني">الدعم</button>
+
+  <div id="supportWidget" class="support-widget hidden">
+    <div class="support-widget-head">
+      <div>
+        <strong>الدعم الفني</strong>
+        <div class="muted">محادثة سريعة مع فريق المنصة</div>
+      </div>
+      <button id="closeSupportWidgetBtn" class="icon-btn" type="button">✕</button>
+    </div>
+    <div class="support-widget-body">
+      <div class="support-quick-actions">
+        <button class="btn btn-light" type="button" data-support-quick="أحتاج مساعدة فنية">مساعدة فنية</button>
+        <button class="btn btn-light" type="button" data-support-quick="لدي مشكلة في الطلب">مشكلة طلب</button>
+        <button class="btn btn-light" type="button" data-support-quick="أحتاج استفسارًا عامًا">استفسار عام</button>
+      </div>
+      <div id="supportMessagesList" class="support-messages-list"></div>
+      <div class="support-compose">
+        <textarea id="supportMessageInput" class="field" placeholder="اكتب رسالتك للدعم الفني"></textarea>
+        <button id="sendSupportMessageBtn" class="btn btn-primary" type="button">إرسال</button>
+      </div>
+    </div>
+  </div>
+
+  <div class="modal" id="productModal">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h2>تفاصيل المنتج</h2>
+        <button class="icon-btn" id="closeProductModal" type="button">✕</button>
+      </div>
+      <div id="productModalContent"></div>
+    </div>
+  </div>
+
+  <div class="modal" id="productFormModal">
+    <div class="modal-content small-modal">
+      <div class="modal-header">
+        <h2>إضافة منتج</h2>
+        <button class="icon-btn" id="closeProductFormModal" type="button">✕</button>
+      </div>
+
+      <form id="addProductForm" class="form-grid">
+        <input class="field" id="pName" placeholder="اسم المنتج" required />
+        <textarea class="field" id="pDescription" placeholder="وصف المنتج" required></textarea>
+
+        <div class="inline-fields">
+          <input class="field" id="pPrice" type="number" min="0" placeholder="السعر" required />
+          <select class="field" id="pCurrency">
+            <option value="ل.س">ل.س</option>
+            <option value="دولار">دولار</option>
+          </select>
+        </div>
+
+        <div class="inline-fields">
+          <input class="field" id="pCategory" placeholder="التصنيف" required />
+          <input class="field" id="pRegion" placeholder="المنطقة" required />
+        </div>
+
+        <div class="inline-fields">
+          <select class="field" id="pCondition">
+            <option value="جديد">جديد</option>
+            <option value="مستعمل كالجديد">مستعمل كالجديد</option>
+            <option value="مستعمل بحالة جيدة">مستعمل بحالة جيدة</option>
+          </select>
+          <input class="field" id="pQuantity" type="number" min="1" value="1" />
+        </div>
+
+        <input class="field" id="pTags" placeholder="وسوم مفصولة بفواصل" />
+        <label class="check-field">
+          <input id="pHasDeliveryService" type="checkbox" />
+          <span>أوفر خدمة توصيل / نقل لهذا المنتج</span>
+        </label>
+        <input class="field" id="pImages" type="file" accept=".jpg,.jpeg,.png,.webp" multiple />
+
+        <button class="btn btn-primary" type="submit">حفظ المنتج</button>
+      </form>
+    </div>
+  </div>
+
+  <div class="modal" id="reportModal">
+    <div class="modal-content small-modal">
+      <div class="modal-header">
+        <h2>إرسال بلاغ للإدارة</h2>
+        <button class="icon-btn" id="closeReportModal" type="button">✕</button>
+      </div>
+
+      <form id="reportForm" class="form-grid">
+        <div id="reportContextBox" class="mini-note"></div>
+        <select class="field" id="reportReason" required>
+          <option value="">اختر سبب البلاغ</option>
+          <option value="محتوى مضلل">محتوى مضلل</option>
+          <option value="سلوك غير مناسب">سلوك غير مناسب</option>
+          <option value="منتج مخالف">منتج مخالف</option>
+          <option value="احتيال أو إساءة">احتيال أو إساءة</option>
+          <option value="مشكلة أخرى">مشكلة أخرى</option>
+        </select>
+        <textarea class="field" id="reportDetails" placeholder="أضف تفاصيل إضافية تساعد الإدارة على المراجعة"></textarea>
+        <button class="btn btn-primary" type="submit">إرسال البلاغ</button>
+      </form>
+    </div>
+  </div>
+
+  <div id="toastContainer" class="toast-container" aria-live="polite" aria-atomic="true"></div>
+
+  <div class="modal" id="deliveryInfoModal">
+    <div class="modal-content small-modal delivery-info-card">
+      <div class="modal-header">
+        <h2 id="deliveryInfoTitle">حالة التوصيل</h2>
+        <button class="icon-btn" id="closeDeliveryInfoModal" type="button">✕</button>
+      </div>
+      <div class="form-grid">
+        <p id="deliveryInfoMessage" class="muted" style="margin:0;"></p>
+      </div>
+    </div>
+  </div>
+
+  <div class="modal" id="confirmModal">
+    <div class="modal-content small-modal confirm-modal-card">
+      <div class="modal-header">
+        <h2 id="confirmModalTitle">تأكيد الإجراء</h2>
+        <button class="icon-btn" id="closeConfirmModal" type="button">✕</button>
+      </div>
+      <div class="form-grid">
+        <p id="confirmModalMessage" class="muted" style="margin:0;"></p>
+        <div class="account-actions-row">
+          <button class="btn btn-outline" id="confirmModalCancelBtn" type="button">إلغاء</button>
+          <button class="btn btn-primary" id="confirmModalApproveBtn" type="button">تأكيد</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="modal" id="contentModal">
+    <div class="modal-content small-modal">
+      <div class="modal-header">
+        <h2 id="contentModalTitle">محتوى ثابت</h2>
+        <button class="icon-btn" id="closeContentModal" type="button">✕</button>
+      </div>
+      <div id="contentModalBody" class="content-static-body"></div>
+    </div>
+  </div>
+
+  <script src="/js/legacy-app.js"></script>
+  <script type="module" src="/js/router.js"></script>
+  <script type="module" src="/js/main.js"></script>
+</body>
+</html>

@@ -1,0 +1,7 @@
+server.js: OK 
+src/app.js: OK 
+src/routes/auth.routes.js: OK 
+src/routes/products.routes.js: OK 
+src/routes/conversations.routes.js: OK 
+src/routes/admin.routes.js: OK 
+src/services/marketplace.service.js: OK 

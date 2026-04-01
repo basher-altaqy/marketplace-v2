@@ -1,0 +1,34 @@
+This is the consolidated baseline:
+- Backend/base modular structure from modular_ui_pool
+- Frontend/index/admin visual refinements from refined_proj
+
+Core files included:
+- server.js
+- src/app.js
+- src/config/env.js
+- src/config/uploads.js
+- src/db/pool.js
+- src/services/marketplace.service.js
+- src/routes/system.routes.js
+- src/routes/auth.routes.js
+- src/routes/profile.routes.js
+- src/routes/products.routes.js
+- src/routes/conversations.routes.js
+- src/routes/admin.routes.js
+- src/middleware/error-handler.js
+- public/index.html
+- public/styles.css
+- public/app.js
+- public/js/main.js
+- public/js/legacy-app.js
+- public/admin/admin.html
+- public/admin/admin.css
+- public/admin/admin.js
+- public/admin/legacy-admin.js
+
+Notable preserved fixes:
+- bcrypt imported in auth.routes.js
+- pool imported in products.routes.js
+- modular loaders preserved
+- seller/buyer/admin flows preserved
+- product ribbons/cards/chat/admin UI improvements included

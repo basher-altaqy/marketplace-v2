@@ -1,0 +1,35 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>دخول لوحة التحكم - بضاعة بلدي</title>
+  <link rel="stylesheet" href="/admin/login.css" />
+</head>
+<body>
+  <div class="admin-login-page">
+    <div class="admin-login-card">
+      <div class="admin-login-brand">
+        <div class="admin-login-logo">ب</div>
+        <div>
+          <h1>لوحة التحكم الرئيسية</h1>
+          <p>دخول محمي لإدارة المستخدمين والمنتجات والمحادثات والبلاغات</p>
+        </div>
+      </div>
+
+      <form id="adminLoginForm" class="admin-login-form">
+        <label for="adminIdentifier">اسم المستخدم / البريد / الهاتف</label>
+        <input id="adminIdentifier" type="text" required />
+
+        <label for="adminPassword">كلمة المرور</label>
+        <input id="adminPassword" type="password" required />
+
+        <button type="submit">دخول لوحة التحكم</button>
+        <div id="adminLoginError" class="admin-login-error"></div>
+      </form>
+    </div>
+  </div>
+
+  <script src="/admin/login.js"></script>
+</body>
+</html>

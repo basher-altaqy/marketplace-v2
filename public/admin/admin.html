@@ -1,0 +1,254 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>لوحة الإدارة</title>
+  <link rel="stylesheet" href="/admin/admin.css" />
+</head>
+<body>
+  <div class="admin-app">
+    <div id="mobileSidebarOverlay" class="mobile-sidebar-overlay"></div>
+
+    <aside id="adminSidebar" class="admin-sidebar">
+      <div class="sidebar-brand">
+        <div class="sidebar-brand-mark">ب</div>
+        <div>
+          <h1>بضاعة بلدي</h1>
+          <p>لوحة تحكم الإدارة</p>
+        </div>
+      </div>
+
+      <div class="sidebar-profile">
+        <span class="sidebar-profile-label">الحساب الحالي</span>
+        <strong id="adminIdentity">جارٍ التحقق...</strong>
+        <span id="adminIdentityRole">مدير النظام</span>
+      </div>
+
+      <nav class="sidebar-nav" aria-label="Admin navigation">
+        <button class="sidebar-nav-item active" type="button" data-section="overview">نظرة عامة</button>
+        <button class="sidebar-nav-item" type="button" data-section="users">المستخدمون</button>
+        <button class="sidebar-nav-item" type="button" data-section="products">المنتجات</button>
+        <button class="sidebar-nav-item" type="button" data-section="reports">البلاغات</button>
+        <button class="sidebar-nav-item" type="button" data-section="conversations">المحادثات</button>
+        <button class="sidebar-nav-item" type="button" data-section="content">المحتوى الثابت</button>
+        <button class="sidebar-nav-item" type="button" data-section="support">الدعم الفني</button>
+        <button class="sidebar-nav-item" type="button" data-section="system">حالة النظام</button>
+        <button class="sidebar-nav-item" type="button" data-section="activity">النشاط</button>
+      </nav>
+
+      <div class="sidebar-footer">
+        <a href="/" class="sidebar-link">العودة إلى الموقع</a>
+        <button id="adminLogoutBtn" class="sidebar-logout" type="button">تسجيل الخروج</button>
+      </div>
+    </aside>
+
+    <main class="admin-main">
+      <header class="admin-header">
+        <div class="admin-header-start">
+          <button id="sidebarToggleBtn" class="icon-button mobile-only" type="button" aria-label="فتح القائمة">☰</button>
+          <div>
+            <h2 id="pageTitle">نظرة عامة</h2>
+            <p id="pageSubtitle">ملخص سريع لحالة المنصة مع أحدث العناصر والنشاطات الأساسية.</p>
+          </div>
+        </div>
+
+        <div class="admin-header-actions">
+          <button id="refreshCurrentBtn" class="primary-button" type="button">تحديث البيانات</button>
+          <span id="adminTimeChip" class="time-chip">آخر تحديث: -</span>
+        </div>
+      </header>
+
+      <div id="globalMessage" class="global-message" aria-live="polite"></div>
+
+      <section class="admin-panel active" data-panel="overview">
+        <div id="overviewStats" class="stats-grid"></div>
+        <div class="content-grid two-columns">
+          <article class="content-card">
+            <div class="card-head"><h3>أحدث المستخدمين</h3></div>
+            <div id="latestUsersList" class="stack-list"></div>
+          </article>
+          <article class="content-card">
+            <div class="card-head"><h3>أحدث المنتجات</h3></div>
+            <div id="latestProductsList" class="stack-list"></div>
+          </article>
+        </div>
+      </section>
+
+      <section class="admin-panel" data-panel="users">
+        <div class="section-head">
+          <div>
+            <h3>إدارة المستخدمين</h3>
+            <p>عرض الحسابات مع فلاتر محلية وإجراءات التفعيل والتعطيل.</p>
+          </div>
+          <div class="toolbar-grid users-toolbar">
+            <input id="usersSearch" class="field-control" type="search" placeholder="ابحث بالاسم أو الهاتف أو البريد" />
+            <select id="usersRoleFilter" class="field-control">
+              <option value="all">كل الأدوار</option>
+              <option value="admin">أدمن</option>
+              <option value="seller">بائع</option>
+              <option value="buyer">مشتري</option>
+            </select>
+            <select id="usersStatusFilter" class="field-control">
+              <option value="all">كل الحالات</option>
+              <option value="active">نشط</option>
+              <option value="inactive">معطل</option>
+            </select>
+          </div>
+        </div>
+        <div id="usersMeta" class="meta-line"></div>
+        <div class="table-card"><div id="usersTableWrap" class="table-wrap"></div></div>
+      </section>
+
+      <section class="admin-panel" data-panel="products">
+        <div class="section-head">
+          <div>
+            <h3>إدارة المنتجات</h3>
+            <p>مراجعة حالة المنتجات وتحديثها باستخدام العقود الحالية.</p>
+          </div>
+          <div class="toolbar-grid products-toolbar">
+            <input id="productsSearch" class="field-control" type="search" placeholder="ابحث باسم المنتج أو اسم البائع" />
+            <select id="productsStatusFilter" class="field-control">
+              <option value="all">كل الحالات</option>
+              <option value="draft">مسودة</option>
+              <option value="published">منشور</option>
+              <option value="hidden">مخفي</option>
+              <option value="sold">مباع</option>
+              <option value="deleted">محذوف</option>
+            </select>
+          </div>
+        </div>
+        <div id="productsMeta" class="meta-line"></div>
+        <div class="table-card"><div id="productsTableWrap" class="table-wrap"></div></div>
+      </section>
+
+      <section class="admin-panel" data-panel="reports">
+        <div class="section-head">
+          <div>
+            <h3>إدارة البلاغات</h3>
+            <p>متابعة البلاغات وتحديث حالتها مع إمكانية إضافة ملاحظة إدارية.</p>
+          </div>
+          <div class="toolbar-grid reports-toolbar">
+            <input id="reportsSearch" class="field-control" type="search" placeholder="ابحث بسبب البلاغ أو الأسماء" />
+            <select id="reportsStatusFilter" class="field-control">
+              <option value="all">كل الحالات</option>
+              <option value="open">مفتوح</option>
+              <option value="reviewed">تمت المراجعة</option>
+              <option value="closed">مغلق</option>
+            </select>
+          </div>
+        </div>
+        <div id="reportsMeta" class="meta-line"></div>
+        <div class="table-card"><div id="reportsTableWrap" class="table-wrap"></div></div>
+      </section>
+
+      <section class="admin-panel" data-panel="conversations">
+        <div class="section-head">
+          <div>
+            <h3>مراقبة المحادثات</h3>
+            <p>عرض المحادثات الجارية والمغلقة كما يعيدها الـ backend الحالي.</p>
+          </div>
+          <div class="toolbar-grid conversations-toolbar">
+            <input id="conversationsSearch" class="field-control" type="search" placeholder="ابحث باسم المنتج أو الأطراف" />
+            <select id="conversationsStatusFilter" class="field-control">
+              <option value="all">كل الحالات</option>
+              <option value="open">مفتوحة</option>
+              <option value="closed">مغلقة</option>
+              <option value="cancelled">ملغاة</option>
+            </select>
+          </div>
+        </div>
+        <div id="conversationsMeta" class="meta-line"></div>
+        <div class="table-card"><div id="conversationsTableWrap" class="table-wrap"></div></div>
+      </section>
+
+      <section class="admin-panel" data-panel="content">
+        <div class="section-head">
+          <div>
+            <h3>إدارة المحتوى الثابت</h3>
+            <p>تحديث معلومات الشركة والسياسات والأسئلة الشائعة ومعلومات التواصل.</p>
+          </div>
+        </div>
+        <div class="table-card">
+          <div id="contentTableWrap" class="table-wrap"></div>
+        </div>
+      </section>
+
+      <section class="admin-panel" data-panel="support">
+        <div class="section-head">
+          <div>
+            <h3>محادثات الدعم الفني</h3>
+            <p>متابعة المحادثات المفتوحة والرد عليها وتعيين المشرف المسؤول عنها.</p>
+          </div>
+          <div class="toolbar-grid conversations-toolbar">
+            <select id="supportStatusFilter" class="field-control">
+              <option value="all">كل الحالات</option>
+              <option value="open">مفتوحة</option>
+              <option value="pending">بانتظار الرد</option>
+              <option value="closed">مغلقة</option>
+            </select>
+          </div>
+        </div>
+        <div id="supportMeta" class="meta-line"></div>
+        <div class="support-workspace">
+          <div class="table-card support-inbox-card">
+            <div id="supportTableWrap" class="support-inbox-list"></div>
+          </div>
+          <div class="table-card support-thread-card">
+            <div id="supportDetailPanel" class="support-detail-panel">اختر محادثة دعم لعرض الرسائل والرد عليها.</div>
+          </div>
+        </div>
+      </section>
+
+      <section class="admin-panel" data-panel="system">
+        <div class="section-head">
+          <div>
+            <h3>حالة النظام</h3>
+            <p>متابعة حالة السيرفر وقاعدة البيانات وآخر الأخطاء وسياسة الملفات والإشعارات.</p>
+          </div>
+        </div>
+        <div id="systemStatusGrid" class="content-grid"></div>
+        <div class="table-card">
+          <div class="card-head"><h3>آخر الأخطاء</h3></div>
+          <div id="systemErrorsWrap" class="table-wrap"></div>
+        </div>
+      </section>
+
+      <section class="admin-panel" data-panel="activity">
+        <div class="section-head">
+          <div>
+            <h3>سجل النشاط</h3>
+            <p>آخر العمليات الإدارية المسجلة في audit logs بدون ترقيم صفحات.</p>
+          </div>
+        </div>
+        <div class="table-card activity-settings-card">
+          <div class="activity-setting-row">
+            <div>
+              <div class="entity-title">تأثير التنين</div>
+              <div id="dragonEffectStatusText" class="entity-subtitle">جارٍ التحقق من الحالة الحالية...</div>
+            </div>
+            <button id="dragonEffectToggleBtn" class="action-button secondary" type="button">تبديل الحالة</button>
+          </div>
+        </div>
+        <div id="activityMeta" class="meta-line"></div>
+        <div class="table-card"><div id="activityTableWrap" class="table-wrap"></div></div>
+      </section>
+    </main>
+  </div>
+
+  <div id="detailsModal" class="modal" aria-hidden="true">
+    <div class="modal-card">
+      <div class="modal-head">
+        <div>
+          <h3 id="modalTitle">التفاصيل</h3>
+          <p id="modalSubtitle">عرض بيانات إضافية من الخادم.</p>
+        </div>
+        <button id="closeDetailsModalBtn" class="icon-button" type="button" aria-label="إغلاق">✕</button>
+      </div>
+      <div id="detailsModalBody" class="modal-body"></div>
+    </div>
+  </div>
+
+  <script src="/admin/admin.js"></script>
+</body>
+</html>
