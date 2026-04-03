@@ -3,6 +3,9 @@
   "version": "1.0.0",
   "private": true,
   "description": "Modular multi-seller marketplace with Node.js, Express, PostgreSQL and vanilla JS",
+  "engines": {
+    "node": ">=20.x"
+  },
   "main": "server.js",
   "scripts": {
     "db:bootstrap": "node scripts/db-bootstrap.js",
