@@ -32,11 +32,9 @@
           <button class="btn btn-primary" id="navAddProductBtn">إضافة منتج</button>
           <button class="btn btn-light hidden" id="navProfileBtn">الملف الشخصي</button>
           <button class="btn btn-light hidden" id="navMessagesBtn">المحادثات<span id="navMessagesBadge" class="cart-badge hidden">0</span></button>
-          <button class="btn btn-light hidden" id="navNotificationsBtn">الإشعارات<span id="navNotificationsBadge" class="cart-badge hidden">0</span></button>
           <button class="btn btn-light hidden" id="navFavoritesBtn">المفضلة<span id="navFavoritesBadge" class="cart-badge hidden">0</span></button>
           <button class="btn btn-light hidden cart-nav-btn" id="navCartBtn">السلة<span id="navCartBadge" class="cart-badge hidden">0</span></button>
           <button class="btn btn-light hidden" id="navOrdersBtn">الطلبات<span id="navOrdersBadge" class="cart-badge hidden">0</span></button>
-          <button class="btn btn-light hidden" id="navAdminBtn">الإدارة</button>
           <button class="btn btn-light hidden" id="navDashboardBtn">لوحتي</button>
           <button class="btn btn-outline hidden" id="navLogoutBtn">خروج</button>
         </div>
@@ -157,12 +155,6 @@
               <button class="btn btn-secondary" type="submit">دخول</button>
             </form>
 
-            <div class="mini-note">
-              <strong>حسابات تجريبية:</strong>
-              <div>بائع: rana@example.com / 12345678</div>
-              <div>مشتري: buyer@example.com / 12345678</div>
-              <div>مشرف: admin@example.com / 12345678</div>
-            </div>
           </div>
 
           <div class="card">
@@ -425,47 +417,6 @@
         </div>
       </section>
 
-      <section id="notificationsView" class="view hidden">
-        <div class="section-head">
-          <div>
-            <h2>مركز الإشعارات</h2>
-            <p class="muted">كل التحديثات المهمة المتعلقة بالطلبات والرسائل والبلاغات والحساب.</p>
-          </div>
-          <div class="nav-actions">
-            <button class="btn btn-light" id="refreshNotificationsBtn" type="button">تحديث</button>
-            <button class="btn btn-outline" id="markAllNotificationsBtn" type="button">تعيين الكل كمقروء</button>
-          </div>
-        </div>
-        <div class="card">
-          <div id="notificationsList" class="list-stack"></div>
-        </div>
-      </section>
-
-      <section id="adminView" class="view hidden">
-        <div class="two-cols">
-          <div class="card">
-            <div class="section-head">
-              <h3>إدارة المستخدمين</h3>
-              <button class="btn btn-light" id="refreshAdminUsers" type="button">
-                تحديث
-              </button>
-            </div>
-
-            <div id="adminUsersList" class="list-stack"></div>
-          </div>
-
-          <div class="card">
-            <div class="section-head">
-              <h3>إدارة المنتجات</h3>
-              <button class="btn btn-light" id="refreshAdminProducts" type="button">
-                تحديث
-              </button>
-            </div>
-
-            <div id="adminProductsList" class="list-stack"></div>
-          </div>
-        </div>
-      </section>
     </main>
 
     <footer class="site-footer">
@@ -498,30 +449,6 @@
         <span id="footerYearText">© 2026 بضاعة بلدي. جميع الحقوق محفوظة.</span>
       </div>
     </footer>
-  </div>
-
-  <button id="supportFloatingBtn" class="support-floating-btn" type="button" aria-label="الدعم الفني">الدعم</button>
-
-  <div id="supportWidget" class="support-widget hidden">
-    <div class="support-widget-head">
-      <div>
-        <strong>الدعم الفني</strong>
-        <div class="muted">محادثة سريعة مع فريق المنصة</div>
-      </div>
-      <button id="closeSupportWidgetBtn" class="icon-btn" type="button">✕</button>
-    </div>
-    <div class="support-widget-body">
-      <div class="support-quick-actions">
-        <button class="btn btn-light" type="button" data-support-quick="أحتاج مساعدة فنية">مساعدة فنية</button>
-        <button class="btn btn-light" type="button" data-support-quick="لدي مشكلة في الطلب">مشكلة طلب</button>
-        <button class="btn btn-light" type="button" data-support-quick="أحتاج استفسارًا عامًا">استفسار عام</button>
-      </div>
-      <div id="supportMessagesList" class="support-messages-list"></div>
-      <div class="support-compose">
-        <textarea id="supportMessageInput" class="field" placeholder="اكتب رسالتك للدعم الفني"></textarea>
-        <button id="sendSupportMessageBtn" class="btn btn-primary" type="button">إرسال</button>
-      </div>
-    </div>
   </div>
 
   <div class="modal" id="productModal">
@@ -573,31 +500,9 @@
           <span>أوفر خدمة توصيل / نقل لهذا المنتج</span>
         </label>
         <input class="field" id="pImages" type="file" accept=".jpg,.jpeg,.png,.webp" multiple />
+        <p class="muted" style="margin:0;">يفضل أن تكون كل صورة أقل من 1MB</p>
 
         <button class="btn btn-primary" type="submit">حفظ المنتج</button>
-      </form>
-    </div>
-  </div>
-
-  <div class="modal" id="reportModal">
-    <div class="modal-content small-modal">
-      <div class="modal-header">
-        <h2>إرسال بلاغ للإدارة</h2>
-        <button class="icon-btn" id="closeReportModal" type="button">✕</button>
-      </div>
-
-      <form id="reportForm" class="form-grid">
-        <div id="reportContextBox" class="mini-note"></div>
-        <select class="field" id="reportReason" required>
-          <option value="">اختر سبب البلاغ</option>
-          <option value="محتوى مضلل">محتوى مضلل</option>
-          <option value="سلوك غير مناسب">سلوك غير مناسب</option>
-          <option value="منتج مخالف">منتج مخالف</option>
-          <option value="احتيال أو إساءة">احتيال أو إساءة</option>
-          <option value="مشكلة أخرى">مشكلة أخرى</option>
-        </select>
-        <textarea class="field" id="reportDetails" placeholder="أضف تفاصيل إضافية تساعد الإدارة على المراجعة"></textarea>
-        <button class="btn btn-primary" type="submit">إرسال البلاغ</button>
       </form>
     </div>
   </div>

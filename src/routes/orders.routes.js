@@ -11,6 +11,8 @@ const {
 const { createNotification, logSystemEvent } = require('../services/platform.service');
 
 const ORDER_STATUSES = ['submitted', 'seller_confirmed', 'buyer_confirmed', 'in_preparation', 'in_transport', 'completed', 'cancelled'];
+const V1_UI_ORDER_TRANSITIONS = ['seller_confirmed', 'cancelled'];
+const LEGACY_READ_ONLY_ORDER_STATUSES = ['buyer_confirmed', 'in_preparation', 'in_transport', 'completed'];
 
 function validateOrderTransition(user, order, nextStatus) {
   if (!ORDER_STATUSES.includes(nextStatus)) {
@@ -42,6 +44,10 @@ function validateOrderTransition(user, order, nextStatus) {
     return order.status === 'submitted' && isSeller
       ? { allowed: true }
       : { allowed: false, reason: 'Only the seller can reject this purchase request.' };
+  }
+
+  if (LEGACY_READ_ONLY_ORDER_STATUSES.includes(nextStatus)) {
+    return { allowed: false, reason: 'This legacy transition is not available in MVP v1.' };
   }
 
   return { allowed: false, reason: 'Only accept or reject actions are available for this order.' };
