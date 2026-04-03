@@ -3262,10 +3262,7 @@ function renderConversationMessages(messages = []) {
     return `
       ${daySeparator}
       <div class="chat-bubble ${message.senderId === state.user?.id ? "is-me is-own" : "is-other"}">
-        <div class="chat-body-row">
-          <div class="chat-body">${escapeHtml(message.body || "")}</div>
-          <span class="chat-time-inline">${escapeHtml(formatChatTime(message.createdAt))}</span>
-        </div>
+        <div class="chat-body">${escapeHtml(message.body || "")}</div>
       </div>
     `;
   }).join("");
