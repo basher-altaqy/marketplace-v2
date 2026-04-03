@@ -68,8 +68,10 @@
 1. Set database and admin environment variables:
    - `DATABASE_URL`
    - `DB_SSL` when required by the host
+   - `NODE_ENV`
    - `ADMIN_PHONE`
-   - `ADMIN_PASSWORD_HASH` or `ADMIN_PASSWORD`
+   - `ADMIN_PASSWORD` (recommended)
+   - `ADMIN_PASSWORD_HASH` only if you already have a valid precomputed hash
    - `ADMIN_EMAIL` recommended
    - Optional: `ADMIN_FULL_NAME`, `ADMIN_STORE_NAME`, `ADMIN_REGION`, `ADMIN_ADDRESS`, `ADMIN_PROFILE_DESCRIPTION`, `ADMIN_WHATSAPP`
 2. Apply schema and seeds:
@@ -103,6 +105,21 @@ The app now checks both required objects and the schema marker version. If the s
 
 ## Deployment Notes
 
+- `database.sql` must remain in the project root because `bootstrap.service.js` reads that exact file path.
+- For Railway, use the service-provided `DATABASE_URL` and set:
+  - `DB_SSL=true`
+  - `NODE_ENV=production`
+  - `ADMIN_PHONE`
+  - `ADMIN_PASSWORD`
 - For Render/Neon, run `npm run db:bootstrap` before the service starts.
+- On Railway, the recommended flow is:
+  1. attach the Node service to Railway PostgreSQL
+  2. confirm `DATABASE_URL` exists automatically
+  3. open the Node service console
+  4. run `npm run db:bootstrap`
+  5. verify tables with `psql "$DATABASE_URL" -c "\dt"` when `psql` is available, or use DBeaver / pgAdmin / Railway SQL shell
+  6. redeploy the app
+- `npm install` is usually not needed manually on Railway after deployment because dependencies are installed during build.
+- Do not run `psql -f database.sql` as the default deployment path when `npm run db:bootstrap` is available; bootstrap applies the schema and completes the required seeds.
 - Do not use `npm run db:reset` in routine deployments; it is destructive and intended only for replacing legacy or damaged marketplace schemas.
 - Legacy migration files (`migration_unified.sql`, `migration_phase3.sql`, `migration_phase3_hotfix.sql`) should not be used as the base schema for new environments.
