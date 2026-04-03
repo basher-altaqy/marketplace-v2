@@ -52,211 +52,6 @@ function publicUser(user) {
 
 const PRODUCT_STATUSES = ['draft', 'published', 'hidden', 'sold', 'archived', 'deleted'];
 
-async function ensureAdminSupport() {
-  await query(`ALTER TABLE conversations ADD COLUMN IF NOT EXISTS conversation_type VARCHAR(20) NOT NULL DEFAULT 'inquiry'`);
-  await query(`
-    DO $$
-    BEGIN
-      IF EXISTS (
-        SELECT 1
-        FROM pg_constraint
-        WHERE conname = 'conversations_conversation_type_check'
-          AND conrelid = 'conversations'::regclass
-      ) THEN
-        ALTER TABLE conversations DROP CONSTRAINT conversations_conversation_type_check;
-      END IF;
-    END $$;
-  `);
-  await query(`
-    DO $$
-    BEGIN
-      IF NOT EXISTS (
-        SELECT 1
-        FROM pg_constraint
-        WHERE conname = 'conversations_conversation_type_check'
-          AND conrelid = 'conversations'::regclass
-      ) THEN
-        ALTER TABLE conversations
-          ADD CONSTRAINT conversations_conversation_type_check
-          CHECK (conversation_type IN ('inquiry', 'order'));
-      END IF;
-    END $$;
-  `);
-  await query(`CREATE INDEX IF NOT EXISTS idx_conversations_type ON conversations(conversation_type)`);
-  await query(`ALTER TABLE products ADD COLUMN IF NOT EXISTS has_delivery_service BOOLEAN NOT NULL DEFAULT FALSE`);
-  await query(`
-    CREATE TABLE IF NOT EXISTS carts (
-      id SERIAL PRIMARY KEY,
-      user_id INT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
-      status VARCHAR(20) NOT NULL DEFAULT 'active',
-      created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-      updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-    )
-  `);
-  await query(`
-    CREATE TABLE IF NOT EXISTS cart_items (
-      id SERIAL PRIMARY KEY,
-      cart_id INT NOT NULL REFERENCES carts(id) ON DELETE CASCADE,
-      product_id INT NOT NULL REFERENCES products(id) ON DELETE CASCADE,
-      seller_id INT NOT NULL REFERENCES users(id),
-      quantity INT NOT NULL DEFAULT 1 CHECK (quantity > 0),
-      snapshot_price DECIMAL(10,2) NOT NULL CHECK (snapshot_price >= 0),
-      note TEXT,
-      created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-      updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-    )
-  `);
-  await query(`
-    CREATE TABLE IF NOT EXISTS conversation_deals (
-      id SERIAL PRIMARY KEY,
-      conversation_id INT NOT NULL REFERENCES conversations(id) ON DELETE CASCADE,
-      product_id INT NOT NULL REFERENCES products(id) ON DELETE CASCADE,
-      buyer_id INT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
-      seller_id INT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
-      quantity INT NOT NULL DEFAULT 1 CHECK (quantity > 0),
-      agreed_price DECIMAL(10,2) NOT NULL CHECK (agreed_price >= 0),
-      note TEXT,
-      status VARCHAR(20) NOT NULL DEFAULT 'pending',
-      created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-      updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-      CONSTRAINT conversation_deals_status_check CHECK (status IN ('pending', 'agreed', 'cancelled'))
-    )
-  `);
-  await query(`
-    CREATE TABLE IF NOT EXISTS orders (
-      id SERIAL PRIMARY KEY,
-      buyer_id INT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
-      seller_id INT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
-      source_type VARCHAR(20) NOT NULL,
-      source_ref_id INT NOT NULL,
-      total_amount DECIMAL(10,2) NOT NULL CHECK (total_amount >= 0),
-      status VARCHAR(20) NOT NULL DEFAULT 'submitted',
-      payment_method VARCHAR(50),
-      notes TEXT,
-      created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-      updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-      CONSTRAINT orders_source_type_check CHECK (source_type IN ('cart', 'conversation', 'product')),
-      CONSTRAINT orders_status_check CHECK (status IN ('submitted', 'seller_confirmed', 'buyer_confirmed', 'in_preparation', 'in_transport', 'completed', 'cancelled'))
-    )
-  `);
-  await query(`
-    CREATE TABLE IF NOT EXISTS order_items (
-      id SERIAL PRIMARY KEY,
-      order_id INT NOT NULL REFERENCES orders(id) ON DELETE CASCADE,
-      product_id INT NOT NULL REFERENCES products(id) ON DELETE CASCADE,
-      quantity INT NOT NULL CHECK (quantity > 0),
-      price DECIMAL(10,2) NOT NULL CHECK (price >= 0),
-      created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-    )
-  `);
-  await query(`CREATE INDEX IF NOT EXISTS idx_carts_user_id ON carts(user_id)`);
-  await query(`CREATE INDEX IF NOT EXISTS idx_carts_user_status ON carts(user_id, status)`);
-  await query(`CREATE INDEX IF NOT EXISTS idx_cart_items_cart_id ON cart_items(cart_id)`);
-  await query(`CREATE INDEX IF NOT EXISTS idx_cart_items_product_id ON cart_items(product_id)`);
-  await query(`CREATE INDEX IF NOT EXISTS idx_cart_items_seller_id ON cart_items(seller_id)`);
-  await query(`CREATE INDEX IF NOT EXISTS idx_conversation_deals_conversation_id ON conversation_deals(conversation_id)`);
-  await query(`CREATE INDEX IF NOT EXISTS idx_conversation_deals_product_id ON conversation_deals(product_id)`);
-  await query(`CREATE INDEX IF NOT EXISTS idx_conversation_deals_buyer_id ON conversation_deals(buyer_id)`);
-  await query(`CREATE INDEX IF NOT EXISTS idx_conversation_deals_seller_id ON conversation_deals(seller_id)`);
-  await query(`CREATE INDEX IF NOT EXISTS idx_conversation_deals_status ON conversation_deals(status)`);
-  await query(`CREATE INDEX IF NOT EXISTS idx_orders_buyer_id ON orders(buyer_id)`);
-  await query(`CREATE INDEX IF NOT EXISTS idx_orders_seller_id ON orders(seller_id)`);
-  await query(`ALTER TABLE orders ADD COLUMN IF NOT EXISTS conversation_id INT REFERENCES conversations(id) ON DELETE SET NULL`);
-  await query(`CREATE INDEX IF NOT EXISTS idx_orders_status ON orders(status)`);
-  await query(`CREATE INDEX IF NOT EXISTS idx_orders_source ON orders(source_type, source_ref_id)`);
-  await query(`CREATE INDEX IF NOT EXISTS idx_orders_conversation_id ON orders(conversation_id)`);
-  await query(`CREATE INDEX IF NOT EXISTS idx_order_items_order_id ON order_items(order_id)`);
-  await query(`CREATE INDEX IF NOT EXISTS idx_order_items_product_id ON order_items(product_id)`);
-  await query(`
-    DO $$
-    BEGIN
-      IF EXISTS (
-        SELECT 1
-        FROM pg_constraint
-        WHERE conname = 'orders_source_type_check'
-          AND conrelid = 'orders'::regclass
-      ) THEN
-        ALTER TABLE orders DROP CONSTRAINT orders_source_type_check;
-      END IF;
-    END $$;
-  `);
-  await query(`
-    DO $$
-    BEGIN
-      IF NOT EXISTS (
-        SELECT 1
-        FROM pg_constraint
-        WHERE conname = 'orders_source_type_check'
-          AND conrelid = 'orders'::regclass
-      ) THEN
-        ALTER TABLE orders
-          ADD CONSTRAINT orders_source_type_check
-          CHECK (source_type IN ('cart', 'conversation', 'product'));
-      END IF;
-    END $$;
-  `);
-  await query(`
-    DO $$
-    BEGIN
-      IF EXISTS (
-        SELECT 1
-        FROM pg_constraint
-        WHERE conname = 'orders_status_check'
-          AND conrelid = 'orders'::regclass
-      ) THEN
-        ALTER TABLE orders DROP CONSTRAINT orders_status_check;
-      END IF;
-    END $$;
-  `);
-  await query(`
-    DO $$
-    BEGIN
-      IF NOT EXISTS (
-        SELECT 1
-        FROM pg_constraint
-        WHERE conname = 'orders_status_check'
-          AND conrelid = 'orders'::regclass
-      ) THEN
-        ALTER TABLE orders
-          ADD CONSTRAINT orders_status_check
-          CHECK (status IN ('submitted', 'seller_confirmed', 'buyer_confirmed', 'in_preparation', 'in_transport', 'completed', 'cancelled'));
-      END IF;
-    END $$;
-  `);
-  await query(`ALTER TABLE reports ADD COLUMN IF NOT EXISTS admin_notes TEXT`);
-  await query(`ALTER TABLE reports ADD COLUMN IF NOT EXISTS details TEXT`);
-  await query(`ALTER TABLE reports ADD COLUMN IF NOT EXISTS conversation_id INT REFERENCES conversations(id)`);
-  await query(`ALTER TABLE reports ADD COLUMN IF NOT EXISTS status VARCHAR(20) DEFAULT 'open'`);
-  await query(`
-    DO $$
-    BEGIN
-      IF EXISTS (
-        SELECT 1
-        FROM pg_constraint
-        WHERE conname = 'products_status_check'
-          AND conrelid = 'products'::regclass
-      ) THEN
-        ALTER TABLE products DROP CONSTRAINT products_status_check;
-      END IF;
-    END $$;
-  `);
-  await query(`
-    DO $$
-    BEGIN
-      IF NOT EXISTS (
-        SELECT 1
-        FROM pg_constraint
-        WHERE conname = 'products_status_check'
-          AND conrelid = 'products'::regclass
-      ) THEN
-        ALTER TABLE products
-          ADD CONSTRAINT products_status_check
-          CHECK (status IN ('draft', 'published', 'hidden', 'sold', 'archived', 'deleted'));
-      END IF;
-    END $$;
-  `);
-}
-
 async function logAudit(actorUserId, actionType, targetType, targetId, metadata = {}) {
   try {
     await query(
@@ -771,6 +566,7 @@ async function getCartSummaryByUserId(userId) {
        p.currency AS product_currency,
        p.region AS product_region,
        p.item_condition AS product_condition,
+       p.has_delivery_service AS product_has_delivery_service,
        u.full_name AS seller_full_name,
        u.store_name AS seller_store_name,
        (
@@ -1063,7 +859,6 @@ module.exports = {
   signToken,
   publicUser,
   query,
-  ensureAdminSupport,
   logAudit,
   authRequired,
   roleRequired,
@@ -1077,7 +872,5 @@ module.exports = {
   getOrdersSummaryForUser,
   getOrderById,
   refreshSellerStats,
-  ensureDefaultAdminAccess,
-  seedDatabase,
   getConversationById
 };

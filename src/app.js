@@ -1,7 +1,8 @@
 const express = require('express');
 const path = require('path');
 const { PUBLIC_DIR, UPLOADS_DIR } = require('./config/env');
-const { ensureAdminSupport, ensureDefaultAdminAccess, seedDatabase, query } = require('./services/marketplace.service');
+const { query } = require('./services/marketplace.service');
+const { assertDatabaseReady } = require('./services/bootstrap.service');
 const { errorHandler } = require('./middleware/error-handler');
 
 const systemRoutes = require('./routes/system.routes');
@@ -18,8 +19,6 @@ const { adminAuthRoutes } = require('./routes/admin-auth.routes');
 const contentRoutes = require('./routes/content.routes');
 const supportRoutes = require('./routes/support.routes');
 const notificationsRoutes = require('./routes/notifications.routes');
-const { ensurePlatformSupport } = require('./services/platform.service');
-const { ensureSecuritySupport } = require('./services/security.service');
 
 function createApp() {
   const app = express();
@@ -72,11 +71,7 @@ function createApp() {
 
 async function prepareApp() {
   await query('SELECT 1');
-  await ensureAdminSupport();
-  await ensurePlatformSupport();
-  await ensureSecuritySupport();
-  await ensureDefaultAdminAccess();
-  await seedDatabase();
+  await assertDatabaseReady();
 }
 
 module.exports = { createApp, prepareApp };

@@ -5,6 +5,9 @@
   "description": "Modular multi-seller marketplace with Node.js, Express, PostgreSQL and vanilla JS",
   "main": "server.js",
   "scripts": {
+    "db:bootstrap": "node scripts/db-bootstrap.js",
+    "db:reset": "node scripts/db-reset.js",
+    "db:schema": "node scripts/db-bootstrap.js --schema-only",
     "start": "node server.js",
     "dev": "node server.js"
   },

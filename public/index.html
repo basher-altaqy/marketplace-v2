@@ -410,6 +410,14 @@
           </aside>
 
           <section class="card messages-main-card whatsapp-main">
+            <div class="mobile-conversation-picker" id="mobileConversationPicker">
+              <button class="mobile-conversation-toggle" id="mobileConversationToggle" type="button" aria-expanded="false">
+                <span class="mobile-conversation-label">المحادثة الحالية</span>
+                <strong id="mobileConversationCurrent">اختر محادثة</strong>
+                <span class="mobile-conversation-arrow" aria-hidden="true">▾</span>
+              </button>
+              <div class="mobile-conversations-menu hidden" id="mobileConversationsMenu"></div>
+            </div>
             <div id="conversationDetails" class="conversation-empty">
               اختر محادثة لعرض الرسائل
             </div>

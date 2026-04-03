@@ -4440,11 +4440,15 @@ textarea::placeholder {
 }
 
 .product-card-refined{
+  display:flex;
+  flex-direction:column;
   overflow:hidden;
+  height:100%;
 }
 
 .product-card-refined .product-image-wrap{
   aspect-ratio:1 / 0.66;
+  flex:0 0 auto;
 }
 
 .product-card-refined .product-body,
@@ -4452,6 +4456,19 @@ textarea::placeholder {
   padding:8px 10px 0;
   gap:6px;
   margin-top:-2px;
+  display:flex;
+  flex-direction:column;
+  flex:1 1 auto;
+  min-height:0;
+}
+
+.product-card-refined .product-title,
+.product-card-refined .product-title-compact{
+  min-height:40px;
+  display:-webkit-box;
+  -webkit-box-orient:vertical;
+  -webkit-line-clamp:2;
+  overflow:hidden;
 }
 
 .product-card-refined .product-info-stack{
@@ -4470,7 +4487,7 @@ textarea::placeholder {
   display:grid;
   grid-template-columns:minmax(0, 1fr);
   width:calc(100% + 20px);
-  margin-top:6px;
+  margin-top:auto;
   margin-inline:-10px;
   margin-bottom:-1px;
   align-self:stretch;
@@ -4529,10 +4546,16 @@ textarea::placeholder {
     gap:5px;
   }
 
+  .product-card-refined .product-title,
+  .product-card-refined .product-title-compact{
+    min-height:34px;
+  }
+
   .product-card-refined .product-card-bottom-actions-wide{
     display:grid;
     grid-template-columns:minmax(0, 1fr);
     width:calc(100% + 16px);
+    margin-top:auto;
     margin-inline:-8px;
     margin-bottom:-1px;
   }
@@ -6546,8 +6569,8 @@ body {
 }
 
 .topbar {
-  position: sticky;
-  top: 0;
+  position: relative;
+  top: auto;
   z-index: 1000;
   min-height: 64px;
   background: rgba(255, 255, 255, 0.7);
@@ -6578,7 +6601,7 @@ body {
   min-height: 64px;
   margin: 0 auto;
   padding: 12px 24px;
-  flex-wrap: nowrap;
+  flex-wrap: wrap;
 }
 
 .brand {
@@ -6678,6 +6701,17 @@ body {
   gap: 8px;
   flex: 0 0 auto;
   flex-wrap: wrap;
+  min-width: 0;
+  max-width: 100%;
+}
+
+.header-nav-row {
+  position: static;
+  top: auto;
+  z-index: auto;
+  grid-column: auto;
+  width: auto;
+  background: transparent;
 }
 
 .btn {
@@ -6831,5 +6865,498 @@ body {
   .searchbar .btn {
     height: 32px;
     padding-inline: 14px;
+  }
+}
+
+/* ===== Chat Date/Time Refresh ===== */
+.chat-day-separator {
+  display: flex;
+  justify-content: center;
+  margin: 10px 0 4px;
+}
+
+.chat-day-separator span {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 24px;
+  padding: 0 10px;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.82);
+  border: 1px solid rgba(15, 23, 42, 0.06);
+  color: #64748b;
+  font-size: 11px;
+  font-weight: 600;
+}
+
+.chat-bubble {
+  position: relative;
+  padding: 10px 12px 8px;
+}
+
+.chat-body-row {
+  display: flex;
+  align-items: flex-end;
+  gap: 8px;
+}
+
+.chat-body {
+  flex: 1 1 auto;
+  min-width: 0;
+  line-height: 1.7;
+  overflow-wrap: anywhere;
+}
+
+.chat-time,
+.chat-time-inline {
+  flex: 0 0 auto;
+  align-self: flex-end;
+  margin-inline-start: 6px;
+  color: #9ca3af;
+  font-size: 11px;
+  line-height: 1;
+  white-space: nowrap;
+}
+
+.chat-time {
+  display: none;
+}
+
+.chat-sender {
+  margin-bottom: 4px;
+}
+
+/* ===== Messages Frame + Mobile Picker ===== */
+.messages-shell,
+.whatsapp-shell {
+  align-items: stretch;
+}
+
+.conversations-card,
+.messages-main-card,
+.whatsapp-main {
+  min-height: calc(100vh - 170px);
+  height: calc(100vh - 170px);
+  max-height: calc(100vh - 170px);
+}
+
+.conversations-card {
+  display: grid;
+  grid-template-rows: auto auto minmax(0, 1fr);
+  overflow: hidden;
+}
+
+.conversations-list {
+  min-height: 0;
+  overflow-y: auto;
+  padding-inline-end: 4px;
+}
+
+.messages-main-card,
+.whatsapp-main {
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+#conversationDetails {
+  flex: 1 1 auto;
+  min-height: 0;
+  height: 100%;
+  overflow: hidden;
+}
+
+.chat-layout,
+.whatsapp-chat-layout {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  height: 100%;
+  overflow: hidden;
+}
+
+.chat-thread,
+.whatsapp-thread {
+  flex: 1 1 auto;
+  min-height: 0;
+  padding-bottom: 16px;
+  max-height: none;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+}
+
+.chat-composer,
+.whatsapp-composer {
+  flex: 0 0 auto;
+  display: grid;
+  gap: 12px;
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.96), #ffffff);
+  border-top: 1px solid rgba(15, 23, 42, 0.08);
+}
+
+.chat-textarea,
+.whatsapp-textarea {
+  width: 100%;
+  min-height: 88px;
+  max-height: 148px;
+}
+
+.chat-composer-actions,
+.whatsapp-composer-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 10px;
+}
+
+.chat-composer-actions .btn,
+.whatsapp-composer-actions .btn {
+  min-width: 112px;
+}
+
+.conversation-empty-panel,
+.whatsapp-empty-panel {
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  text-align: center;
+  padding: 28px 20px;
+}
+
+.mobile-conversation-picker {
+  display: none;
+}
+
+.mobile-conversation-toggle {
+  width: 100%;
+  border: 1px solid rgba(148, 163, 184, 0.22);
+  border-radius: 18px;
+  background: linear-gradient(180deg, #ffffff, #f8fbff);
+  color: #0f172a;
+  padding: 12px 14px;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  cursor: pointer;
+}
+
+.mobile-conversation-label {
+  color: #64748b;
+  font-size: 12px;
+  flex: 0 0 auto;
+}
+
+.mobile-conversation-toggle strong {
+  flex: 1 1 auto;
+  min-width: 0;
+  text-align: right;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.mobile-conversation-arrow {
+  flex: 0 0 auto;
+  color: #64748b;
+  transition: transform 0.18s ease;
+}
+
+.mobile-conversation-picker.is-open .mobile-conversation-arrow {
+  transform: rotate(180deg);
+}
+
+.mobile-conversations-menu {
+  margin-top: 10px;
+  display: grid;
+  gap: 8px;
+  max-height: min(42vh, 320px);
+  overflow-y: auto;
+  padding-inline-end: 2px;
+}
+
+.mobile-conversation-option {
+  width: 100%;
+  border: 1px solid rgba(148, 163, 184, 0.2);
+  border-radius: 16px;
+  background: #ffffff;
+  color: #111827;
+  padding: 12px 14px;
+  display: grid;
+  gap: 4px;
+  text-align: right;
+  cursor: pointer;
+}
+
+.mobile-conversation-option span {
+  color: #64748b;
+  font-size: 12px;
+}
+
+.mobile-conversation-option.is-active {
+  border-color: rgba(37, 99, 235, 0.24);
+  background: linear-gradient(180deg, #eff6ff, #ffffff);
+}
+
+@media (max-width: 900px) {
+  .messages-shell,
+  .whatsapp-shell {
+    grid-template-columns: 1fr;
+  }
+
+  .conversations-card {
+    display: none;
+  }
+
+  .mobile-conversation-picker {
+    display: block;
+    margin-bottom: 14px;
+  }
+
+  .messages-main-card,
+  .whatsapp-main {
+    min-height: calc(100vh - 140px);
+    height: calc(100vh - 140px);
+    max-height: calc(100vh - 140px);
+  }
+
+  .chat-header,
+  .whatsapp-chat-header {
+    padding: 14px 14px 12px;
+  }
+
+  .chat-thread,
+  .whatsapp-thread {
+    padding: 16px 12px;
+  }
+
+  .chat-composer,
+  .whatsapp-composer {
+    padding: 12px;
+  }
+
+  .chat-textarea,
+  .whatsapp-textarea {
+    min-height: 76px;
+  }
+
+  .chat-composer-actions .btn,
+  .whatsapp-composer-actions .btn {
+    width: 100%;
+  }
+}
+
+/* ===== Messages UX Hotfix ===== */
+.conversations-card {
+  min-height: calc(100dvh - 170px);
+  max-height: calc(100dvh - 170px);
+}
+
+.conversations-list {
+  max-height: min(68dvh, 720px);
+}
+
+.messages-main-card,
+.whatsapp-main {
+  min-height: 0;
+  height: auto;
+  max-height: none;
+  overflow: visible;
+}
+
+#conversationDetails {
+  height: auto;
+  overflow: visible;
+}
+
+.chat-layout,
+.whatsapp-chat-layout {
+  min-height: 0;
+  height: auto;
+  overflow: visible;
+}
+
+.chat-thread,
+.whatsapp-thread {
+  flex: 0 1 auto;
+  min-height: 260px;
+  max-height: min(54dvh, 540px);
+  overflow-y: auto;
+}
+
+.chat-composer,
+.whatsapp-composer {
+  position: relative;
+  padding: 12px 16px 16px;
+}
+
+.chat-textarea,
+.whatsapp-textarea {
+  display: block;
+  width: 100%;
+  min-height: 96px;
+}
+
+.deal-strip {
+  gap: 8px;
+  padding-top: 10px;
+}
+
+.linked-orders-card.chat-linked-order {
+  gap: 8px;
+  padding: 10px 12px;
+}
+
+.chat-linked-order .deal-head {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 10px;
+  align-items: start;
+}
+
+.chat-linked-order .linked-order-summary {
+  min-width: 0;
+}
+
+.chat-linked-order .linked-order-summary strong {
+  display: block;
+  margin-bottom: 4px;
+}
+
+.chat-linked-order .deal-actions {
+  margin-top: 0;
+  justify-content: flex-end;
+}
+
+.chat-linked-order .deal-actions .btn {
+  height: 34px;
+  padding: 0 14px;
+}
+
+@media (max-width: 900px) {
+  .messages-main-card,
+  .whatsapp-main {
+    overflow: visible;
+  }
+
+  .chat-thread,
+  .whatsapp-thread {
+    min-height: 220px;
+    max-height: min(42dvh, 380px);
+    padding: 14px 12px;
+  }
+
+  .chat-textarea,
+  .whatsapp-textarea {
+    min-height: 90px;
+  }
+
+  .chat-linked-order .deal-head {
+    grid-template-columns: 1fr;
+  }
+
+  .chat-linked-order .deal-actions .btn {
+    width: 100%;
+  }
+}
+
+/* ===== Compact Open Conversations ===== */
+.conversations-list {
+  gap: 3px;
+}
+
+.conversation-card,
+.conversation-entry {
+  display: grid;
+  grid-template-columns: 28px minmax(0, 1fr);
+  align-items: center;
+  column-gap: 6px;
+  row-gap: 0;
+  border-radius: 10px;
+  padding: 3px 6px;
+  min-height: 0;
+  box-shadow: 0 2px 8px rgba(15, 23, 42, 0.03);
+}
+
+.conversation-avatar,
+.conversation-avatar-pro {
+  width: 28px;
+  height: 28px;
+  min-width: 28px;
+  min-height: 28px;
+  font-size: 10px;
+}
+
+.conversation-card-body {
+  min-width: 0;
+  gap: 1px;
+}
+
+.conversation-row-top,
+.conversation-card-footer {
+  gap: 4px;
+}
+
+.conversation-row-name {
+  font-size: 11px;
+  line-height: 1.15;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.conversation-row-time,
+.conversation-meta-note {
+  font-size: 8px;
+  white-space: nowrap;
+}
+
+.conversation-row-product {
+  gap: 3px;
+  align-items: center;
+}
+
+.conversation-row-product strong {
+  font-size: 10px;
+  line-height: 1.1;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.conversation-product-chip {
+  padding: 0 5px;
+  border-radius: 999px;
+  font-size: 8px;
+}
+
+.conversation-row-last {
+  font-size: 9px;
+  line-height: 1.1;
+  display: -webkit-box;
+  -webkit-line-clamp: 1;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+
+.conversation-row-status {
+  padding: 1px 5px;
+  font-size: 8px;
+}
+
+@media (max-width: 900px) {
+  .conversation-card,
+  .conversation-entry {
+    grid-template-columns: 26px minmax(0, 1fr);
+    padding: 3px 5px;
+  }
+
+  .conversation-avatar,
+  .conversation-avatar-pro {
+    width: 26px;
+    height: 26px;
+    min-width: 26px;
+    min-height: 26px;
+    font-size: 10px;
   }
 }

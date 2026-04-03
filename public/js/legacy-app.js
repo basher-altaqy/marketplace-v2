@@ -32,7 +32,8 @@ const state = {
   supportConversation: null,
   siteContentCache: {},
   reportDraft: null,
-  metaLoaded: false
+  metaLoaded: false,
+  mobileConversationsOpen: false
 };
 
 const homeView = document.getElementById("homeView");
@@ -140,6 +141,10 @@ const sellerRatingsList = document.getElementById("sellerRatingsList");
 
 const conversationsList = document.getElementById("conversationsList");
 const conversationDetails = document.getElementById("conversationDetails");
+const mobileConversationPicker = document.getElementById("mobileConversationPicker");
+const mobileConversationToggle = document.getElementById("mobileConversationToggle");
+const mobileConversationCurrent = document.getElementById("mobileConversationCurrent");
+const mobileConversationsMenu = document.getElementById("mobileConversationsMenu");
 const notificationsList = document.getElementById("notificationsList");
 
 const adminUsersList = document.getElementById("adminUsersList");
@@ -1356,7 +1361,7 @@ function getOrderStatusTone(status) {
 
 function getOrderStatusExplanation(order) {
   const messages = {
-    submitted: "تم إرسال طلب الشراء وفتح محادثة مع التاجر. بانتظار القبول أو الرفض.",
+    submitted: "تم إرسال طلب الشراء.",
     seller_confirmed: "وافق التاجر على طلب الشراء. تابع التفاصيل من داخل المحادثة.",
     buyer_confirmed: "هذا الطلب يتبع مسارًا قديمًا وتم قبوله بالفعل.",
     in_preparation: "هذا الطلب يتبع مسارًا قديمًا وانتقل إلى مرحلة تنفيذ لاحقة.",
@@ -2943,6 +2948,56 @@ async function loadConversationsView() {
   }
 }
 
+function formatChatDayKey(value) {
+  const date = new Date(value || "");
+  if (Number.isNaN(date.getTime())) return "";
+  return `${date.getFullYear()}-${date.getMonth()}-${date.getDate()}`;
+}
+
+function formatChatDayLabel(value) {
+  const date = new Date(value || "");
+  if (Number.isNaN(date.getTime())) return "";
+  return date.toLocaleDateString("ar", {
+    weekday: "long",
+    day: "numeric",
+    month: "long"
+  });
+}
+
+function formatChatTime(value) {
+  const date = new Date(value || "");
+  if (Number.isNaN(date.getTime())) return "";
+  return date.toLocaleTimeString("ar", {
+    hour: "numeric",
+    minute: "2-digit"
+  });
+}
+
+function renderConversationMessages(messages = []) {
+  const items = Array.isArray(messages) ? messages : [];
+  if (!items.length) return '<p class="muted">لا توجد رسائل.</p>';
+
+  let lastDayKey = "";
+  return items.map((message) => {
+    const dayKey = formatChatDayKey(message.createdAt);
+    const daySeparator = dayKey && dayKey !== lastDayKey
+      ? `<div class="chat-day-separator"><span>${escapeHtml(formatChatDayLabel(message.createdAt))}</span></div>`
+      : "";
+    lastDayKey = dayKey || lastDayKey;
+
+    return `
+      ${daySeparator}
+      <div class="chat-bubble ${message.senderId === state.user?.id ? "is-me is-own" : "is-other"}">
+        <div class="chat-sender">${escapeHtml(message.senderName || "")}</div>
+        <div class="chat-body-row">
+          <div class="chat-body">${escapeHtml(message.body || "")}</div>
+          <span class="chat-time-inline">${escapeHtml(formatChatTime(message.createdAt))}</span>
+        </div>
+      </div>
+    `;
+  }).join("");
+}
+
 function renderConversationDetails(conversation) {
   if (!conversationDetails) return;
 
@@ -3062,6 +3117,130 @@ function renderConversationDetails(conversation) {
   });
 }
 
+function renderConversationDetails(conversation) {
+  if (!conversationDetails) return;
+
+  if (!conversation) {
+    conversationDetails.innerHTML = `<div class="conversation-empty-panel whatsapp-empty-panel"><h3>اختر محادثة</h3><p class="muted">ستظهر الرسائل هنا بشكل أوضح وبمساحة أكبر للمحادثة الأساسية.</p></div>`;
+    return;
+  }
+
+  const canReply = conversation.status === "open";
+  const counterparty = state.user?.id === conversation.sellerId
+    ? (conversation.buyer?.fullName || "مشتري")
+    : (conversation.seller?.storeName || conversation.seller?.fullName || "متجر");
+  const linkedOrders = Array.isArray(conversation.linkedOrders) ? conversation.linkedOrders : [];
+
+  conversationDetails.innerHTML = `
+    <div class="chat-layout whatsapp-chat-layout">
+      <div class="chat-header whatsapp-chat-header">
+        <div class="chat-person-block">
+          <div class="chat-person-avatar">${escapeHtml((counterparty || "م")[0] || "م")}</div>
+          <div>
+            <h3>${escapeHtml(counterparty)}</h3>
+          </div>
+        </div>
+        <div class="chat-header-meta">
+          <span class="chat-chip">${escapeHtml(formatConversationType(conversation.conversationType))}</span>
+          <span class="chat-chip">الحالة: ${escapeHtml(formatConversationStatus(conversation.status || ""))}</span>
+          <span class="chat-chip light">${escapeHtml(conversation.seller?.storeName || conversation.seller?.fullName || "")}</span>
+          <button class="btn btn-light" id="conversationReportBtn" type="button">بلاغ</button>
+        </div>
+      </div>
+
+      ${linkedOrders.length ? `
+        <div class="deal-strip">
+          ${linkedOrders.map((order) => {
+            return `
+              <div class="compact-card linked-orders-card">
+                <div class="deal-head">
+                  <div>
+                    <strong>طلب شراء #${order.id}</strong>
+                    <div class="muted">عدد العناصر: ${order.itemsCount || 0} - الإجمالي: ${formatPrice(order.totalAmount || 0, conversation.product?.currency || "ل.س")}</div>
+                  </div>
+                  <span class="deal-status ${getOrderStatusTone(order.status)}">${escapeHtml(formatOrderStatus(order.status))}</span>
+                </div>
+                <div class="muted">${escapeHtml(getOrderStatusExplanation(order))}</div>
+                <div class="deal-actions">
+                  <button class="btn btn-light" data-open-linked-order="${order.id}" type="button">عرض الطلب</button>
+                </div>
+              </div>
+            `;
+          }).join("")}
+        </div>
+      ` : ""}
+
+      <div class="chat-thread whatsapp-thread">
+        ${renderConversationMessages(conversation.messages || [])}
+      </div>
+
+      ${canReply ? `
+        <div class="chat-composer whatsapp-composer">
+          <div class="chat-input-shell whatsapp-input-shell">
+            <button class="chat-send-icon-btn" id="sendConversationMessageBtn" type="button" aria-label="إرسال الرسالة" title="إرسال">
+              <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+                <path d="M21 3 10 14"></path>
+                <path d="m21 3-7 18-4-7-7-4 18-7Z"></path>
+              </svg>
+            </button>
+            <input class="field chat-textarea whatsapp-textarea chat-singleline-input" id="conversationMessageInput" type="text" placeholder="اكتب رسالتك" />
+          </div>
+        </div>
+      ` : ""}
+    </div>
+  `;
+
+  const sendConversationMessage = async () => {
+    const input = document.getElementById("conversationMessageInput");
+    const message = input?.value?.trim() || "";
+    if (!message) {
+      showToast("اكتب رسالة أولًا");
+      return;
+    }
+
+    try {
+      await api(`/api/conversations/${conversation.id}/messages`, {
+        method: "POST",
+        body: JSON.stringify({ message })
+      });
+      input.value = "";
+      await openConversation(conversation.id);
+      await loadMessages();
+    } catch (error) {
+      showToast(error.message);
+    }
+  };
+
+  document.getElementById("sendConversationMessageBtn")?.addEventListener("click", sendConversationMessage);
+  document.getElementById("conversationMessageInput")?.addEventListener("keydown", async (event) => {
+    if (event.key !== "Enter" || event.shiftKey) return;
+    event.preventDefault();
+    await sendConversationMessage();
+  });
+
+  document.getElementById("conversationReportBtn")?.addEventListener("click", async () => {
+    await openReportModal({
+      conversationId: conversation.id,
+      productId: conversation.product?.id,
+      productName: conversation.product?.name,
+      reportedUserId: conversation.sellerId,
+      reportedUserName: conversation.seller?.storeName || conversation.seller?.fullName
+    });
+  });
+
+  conversationDetails.querySelectorAll("[data-open-linked-order]").forEach((btn) => {
+    btn.addEventListener("click", async () => {
+      if (typeof window.navigateTo === "function") {
+        await window.navigateTo(`/order/${Number(btn.dataset.openLinkedOrder)}`);
+        return;
+      }
+      showView("orders");
+      await loadOrders();
+      await loadOrderDetails(Number(btn.dataset.openLinkedOrder));
+    });
+  });
+}
+
 async function loadMessages() {
   if (!state.user) return;
   try {
@@ -3132,6 +3311,247 @@ function renderNotifications() {
       }
     });
   });
+}
+
+function getFilteredConversations(conversations) {
+  const searchValue = String(document.getElementById("conversationQuickSearch")?.value || "").trim().toLowerCase();
+  const source = Array.isArray(conversations) ? conversations : [];
+  const filtered = searchValue
+    ? source.filter((conversation) => {
+        const haystack = [
+          conversation.product?.name,
+          conversation.lastMessage,
+          conversation.seller?.storeName,
+          conversation.seller?.fullName,
+          conversation.buyer?.fullName
+        ]
+          .filter(Boolean)
+          .join(" ")
+          .toLowerCase();
+        return haystack.includes(searchValue);
+      })
+    : source;
+
+  return { filtered, searchValue };
+}
+
+function getConversationDisplayName(conversation) {
+  return state.user?.role === "seller"
+    ? (conversation.buyer?.fullName || "مستخدم")
+    : (conversation.seller?.storeName || conversation.seller?.fullName || "متجر");
+}
+
+function createConversationCardMarkup(conversation, activeConversationId = null) {
+  const otherPartyName = getConversationDisplayName(conversation);
+  const initial = String(otherPartyName || "م").slice(0, 1);
+  return `
+    <button class="conversation-entry conversation-card ${activeConversationId === conversation.id ? "is-active active" : ""}" data-open-conversation="${conversation.id}" type="button">
+      <div class="conversation-avatar conversation-avatar-pro">${escapeHtml(initial)}</div>
+      <div class="conversation-card-body">
+        <div class="conversation-row-top">
+          <div class="conversation-row-name">${escapeHtml(otherPartyName)}</div>
+          <div class="conversation-row-time">${conversation.lastMessageAt ? new Date(conversation.lastMessageAt).toLocaleDateString("ar") : ""}</div>
+        </div>
+        <div class="conversation-row-product">
+          <span class="conversation-product-chip">${escapeHtml(formatConversationType(conversation.conversationType))}</span>
+          <strong>${escapeHtml(conversation.product?.name || "بدون منتج")}</strong>
+        </div>
+        <div class="conversation-row-last">${escapeHtml(conversation.lastMessage || "لا توجد رسائل بعد")}</div>
+        <div class="conversation-card-footer">
+          <div class="conversation-row-status ${getConversationStatusClass(conversation.status)}">${formatConversationStatus(conversation.status)}</div>
+          <div class="conversation-meta-note">${conversation.lastMessageAt ? new Date(conversation.lastMessageAt).toLocaleTimeString("ar", { hour: "2-digit", minute: "2-digit" }) : "بدون تحديث"}</div>
+        </div>
+      </div>
+    </button>
+  `;
+}
+
+function setMobileConversationPickerOpen(nextOpen) {
+  state.mobileConversationsOpen = Boolean(nextOpen);
+  mobileConversationPicker?.classList.toggle("is-open", state.mobileConversationsOpen);
+  mobileConversationsMenu?.classList.toggle("hidden", !state.mobileConversationsOpen);
+  mobileConversationToggle?.setAttribute("aria-expanded", state.mobileConversationsOpen ? "true" : "false");
+}
+
+function renderConversationDetails(conversation) {
+  if (!conversationDetails) return;
+
+  if (!conversation) {
+    conversationDetails.innerHTML = `<div class="conversation-empty-panel whatsapp-empty-panel"><h3>اختر محادثة</h3><p class="muted">ستظهر الرسائل هنا داخل إطار واضح مع تمرير مستقل للرسائل.</p></div>`;
+    return;
+  }
+
+  const canReply = conversation.status === "open";
+  const counterparty = state.user?.id === conversation.sellerId
+    ? (conversation.buyer?.fullName || "مشتري")
+    : (conversation.seller?.storeName || conversation.seller?.fullName || "متجر");
+  const linkedOrders = Array.isArray(conversation.linkedOrders) ? conversation.linkedOrders : [];
+
+  conversationDetails.innerHTML = `
+    <div class="chat-layout whatsapp-chat-layout">
+      <div class="chat-header whatsapp-chat-header">
+        <div class="chat-person-block">
+          <div class="chat-person-avatar">${escapeHtml((counterparty || "م")[0] || "م")}</div>
+          <div>
+            <h3>${escapeHtml(counterparty)}</h3>
+          </div>
+        </div>
+        <div class="chat-header-meta">
+          <span class="chat-chip">${escapeHtml(formatConversationType(conversation.conversationType))}</span>
+          <span class="chat-chip">الحالة: ${escapeHtml(formatConversationStatus(conversation.status || ""))}</span>
+          <span class="chat-chip light">${escapeHtml(conversation.seller?.storeName || conversation.seller?.fullName || "")}</span>
+          <button class="btn btn-light" id="conversationReportBtn" type="button">بلاغ</button>
+        </div>
+      </div>
+
+      ${linkedOrders.length ? `
+        <div class="deal-strip">
+          ${linkedOrders.map((order) => `
+            <div class="compact-card linked-orders-card chat-linked-order">
+              <div class="deal-head">
+                <div class="linked-order-summary">
+                  <strong>طلب شراء #${order.id}</strong>
+                  <div class="muted">عدد العناصر: ${order.itemsCount || 0} - الإجمالي: ${formatPrice(order.totalAmount || 0, conversation.product?.currency || "ل.س")}</div>
+                </div>
+                <span class="deal-status ${getOrderStatusTone(order.status)}">${escapeHtml(formatOrderStatus(order.status))}</span>
+              </div>
+              <div class="deal-actions">
+                <button class="btn btn-light" data-open-linked-order="${order.id}" type="button">عرض الطلب</button>
+              </div>
+            </div>
+          `).join("")}
+        </div>
+      ` : ""}
+
+      <div class="chat-thread whatsapp-thread" id="activeChatThread">
+        ${renderConversationMessages(conversation.messages || [])}
+      </div>
+
+      ${canReply ? `
+        <div class="chat-composer whatsapp-composer">
+          <div class="chat-input-shell whatsapp-input-shell">
+            <button class="chat-send-icon-btn" id="sendConversationMessageBtn" type="button" aria-label="إرسال الرسالة" title="إرسال">
+              <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+                <path d="M21 3 10 14"></path>
+                <path d="m21 3-7 18-4-7-7-4 18-7Z"></path>
+              </svg>
+            </button>
+            <input class="field chat-textarea whatsapp-textarea chat-singleline-input" id="conversationMessageInput" type="text" placeholder="اكتب رسالتك" />
+          </div>
+        </div>
+      ` : ""}
+    </div>
+  `;
+
+  const sendConversationMessage = async () => {
+    const input = document.getElementById("conversationMessageInput");
+    const message = input?.value?.trim() || "";
+    if (!message) {
+      showToast("اكتب رسالة أولًا");
+      return;
+    }
+
+    try {
+      await api(`/api/conversations/${conversation.id}/messages`, {
+        method: "POST",
+        body: JSON.stringify({ message })
+      });
+      input.value = "";
+      await openConversation(conversation.id);
+      await loadMessages();
+    } catch (error) {
+      showToast(error.message || "تعذر إرسال الرسالة");
+    }
+  };
+
+  document.getElementById("sendConversationMessageBtn")?.addEventListener("click", sendConversationMessage);
+  document.getElementById("conversationMessageInput")?.addEventListener("keydown", async (event) => {
+    if (event.key !== "Enter" || event.shiftKey) return;
+    event.preventDefault();
+    await sendConversationMessage();
+  });
+
+  document.getElementById("conversationReportBtn")?.addEventListener("click", async () => {
+    await openReportModal({
+      conversationId: conversation.id,
+      productId: conversation.product?.id,
+      productName: conversation.product?.name,
+      reportedUserId: conversation.sellerId,
+      reportedUserName: conversation.seller?.storeName || conversation.seller?.fullName
+    });
+  });
+
+  conversationDetails.querySelectorAll("[data-open-linked-order]").forEach((btn) => {
+    btn.addEventListener("click", async () => {
+      if (typeof window.navigateTo === "function") {
+        await window.navigateTo(`/order/${Number(btn.dataset.openLinkedOrder)}`);
+        return;
+      }
+      showView("orders");
+      await loadOrders();
+      await loadOrderDetails(Number(btn.dataset.openLinkedOrder));
+    });
+  });
+
+  const thread = document.getElementById("activeChatThread");
+  if (thread) {
+    thread.scrollTop = thread.scrollHeight;
+  }
+}
+
+function renderConversationsList(conversations, activeConversationId = null) {
+  const listEl = document.getElementById("conversationsList");
+  if (!listEl) return;
+
+  const { filtered, searchValue } = getFilteredConversations(conversations);
+
+  if (!filtered.length) {
+    listEl.innerHTML = `
+      <div class="conversation-list-empty">
+        <div class="conversation-list-empty-icon">+</div>
+        <div class="conversation-empty-title">${searchValue ? "لا توجد نتائج مطابقة" : "لا توجد محادثات بعد"}</div>
+        <div class="conversation-empty-text">${searchValue ? "جرّب كلمة مختلفة أو امسح البحث لعرض كل المحادثات." : "ستظهر هنا الرسائل المرتبطة بمنتجاتك وطلباتك بشكل أوضح."}</div>
+      </div>
+    `;
+    if (mobileConversationCurrent) mobileConversationCurrent.textContent = searchValue ? "لا توجد نتائج" : "لا توجد محادثات";
+    if (mobileConversationsMenu) mobileConversationsMenu.innerHTML = "";
+    setMobileConversationPickerOpen(false);
+    return;
+  }
+
+  listEl.innerHTML = filtered.map((conversation) => createConversationCardMarkup(conversation, activeConversationId)).join("");
+
+  const activeConversation = filtered.find((conversation) => conversation.id === activeConversationId) || null;
+  if (mobileConversationCurrent) {
+    mobileConversationCurrent.textContent = activeConversation ? getConversationDisplayName(activeConversation) : "اختر محادثة";
+  }
+
+  if (mobileConversationsMenu) {
+    mobileConversationsMenu.innerHTML = filtered.map((conversation) => `
+      <button class="mobile-conversation-option ${activeConversationId === conversation.id ? "is-active" : ""}" data-open-conversation="${conversation.id}" type="button">
+        <strong>${escapeHtml(getConversationDisplayName(conversation))}</strong>
+        <span>${escapeHtml(conversation.product?.name || "بدون منتج")}</span>
+      </button>
+    `).join("");
+  }
+
+  const bindOpenConversation = (scope) => {
+    scope?.querySelectorAll("[data-open-conversation]").forEach((item) => {
+      item.addEventListener("click", async (event) => {
+        const conversationId = Number(item.dataset.openConversation);
+        setMobileConversationPickerOpen(false);
+        if (typeof window.navigateTo === "function") {
+          event.preventDefault();
+          await window.navigateTo(`/conversation/${conversationId}`);
+          return;
+        }
+        await openConversation(conversationId);
+      });
+    });
+  };
+
+  bindOpenConversation(listEl);
+  bindOpenConversation(mobileConversationsMenu);
 }
 
 function renderSupportConversation() {
@@ -3456,9 +3876,6 @@ function bindStaticEvents() {
 
   document.addEventListener("visibilitychange", updateHomeCategoryMarqueeActivity);
   window.addEventListener("marketplace:viewchange", updateHomeCategoryMarqueeActivity);
-  window.addEventListener("scroll", syncTopbarScrollState, { passive: true });
-  syncTopbarScrollState();
-
   navLoginBtn?.addEventListener("click", () => showView("auth"));
 
   navLogoutBtn?.addEventListener("click", () => {
@@ -3592,6 +4009,17 @@ function bindStaticEvents() {
 
   document.getElementById("conversationQuickSearch")?.addEventListener("input", () => {
     renderConversationsList(state.conversations, state.activeConversationId);
+  });
+
+  mobileConversationToggle?.addEventListener("click", () => {
+    setMobileConversationPickerOpen(!state.mobileConversationsOpen);
+  });
+
+  document.addEventListener("click", (event) => {
+    if (!state.mobileConversationsOpen || !mobileConversationPicker) return;
+    if (!mobileConversationPicker.contains(event.target)) {
+      setMobileConversationPickerOpen(false);
+    }
   });
 
   document.getElementById("refreshAdminUsers")?.addEventListener("click", async () => {
@@ -4393,6 +4821,298 @@ function bindSecurityOverrides() {
   });
   document.getElementById("requestVerificationCodeBtn")?.addEventListener("click", requestVerificationCode);
   document.getElementById("submitVerificationCodeBtn")?.addEventListener("click", submitVerificationCode);
+}
+
+function renderConversationDetails(conversation) {
+  if (!conversationDetails) return;
+
+  if (!conversation) {
+    conversationDetails.innerHTML = `<div class="conversation-empty-panel whatsapp-empty-panel"><h3>اختر محادثة</h3><p class="muted">ستظهر الرسائل هنا داخل إطار ثابت مع تمرير مستقل للرسائل.</p></div>`;
+    return;
+  }
+
+  const canReply = conversation.status === "open";
+  const counterparty = state.user?.id === conversation.sellerId
+    ? (conversation.buyer?.fullName || "مشتري")
+    : (conversation.seller?.storeName || conversation.seller?.fullName || "متجر");
+  const linkedOrders = Array.isArray(conversation.linkedOrders) ? conversation.linkedOrders : [];
+
+  conversationDetails.innerHTML = `
+    <div class="chat-layout whatsapp-chat-layout">
+      <div class="chat-header whatsapp-chat-header">
+        <div class="chat-person-block">
+          <div class="chat-person-avatar">${escapeHtml((counterparty || "م")[0] || "م")}</div>
+          <div>
+            <h3>${escapeHtml(counterparty)}</h3>
+          </div>
+        </div>
+        <div class="chat-header-meta">
+          <span class="chat-chip">${escapeHtml(formatConversationType(conversation.conversationType))}</span>
+          <span class="chat-chip">الحالة: ${escapeHtml(formatConversationStatus(conversation.status || ""))}</span>
+          <span class="chat-chip light">${escapeHtml(conversation.seller?.storeName || conversation.seller?.fullName || "")}</span>
+          <button class="btn btn-light" id="conversationReportBtn" type="button">بلاغ</button>
+        </div>
+      </div>
+
+      ${linkedOrders.length ? `
+        <div class="deal-strip">
+          ${linkedOrders.map((order) => `
+            <div class="compact-card linked-orders-card">
+              <div class="deal-head">
+                <div>
+                  <strong>طلب شراء #${order.id}</strong>
+                  <div class="muted">عدد العناصر: ${order.itemsCount || 0} - الإجمالي: ${formatPrice(order.totalAmount || 0, conversation.product?.currency || "ل.س")}</div>
+                </div>
+                <span class="deal-status ${getOrderStatusTone(order.status)}">${escapeHtml(formatOrderStatus(order.status))}</span>
+              </div>
+              <div class="muted">${escapeHtml(getOrderStatusExplanation(order))}</div>
+              <div class="deal-actions">
+                <button class="btn btn-light" data-open-linked-order="${order.id}" type="button">عرض الطلب</button>
+              </div>
+            </div>
+          `).join("")}
+        </div>
+      ` : ""}
+
+      <div class="chat-thread whatsapp-thread" id="activeChatThread">
+        ${renderConversationMessages(conversation.messages || [])}
+      </div>
+
+      ${canReply ? `
+        <div class="chat-composer whatsapp-composer">
+          <div class="chat-input-shell whatsapp-input-shell">
+            <input class="field chat-textarea whatsapp-textarea chat-singleline-input" id="conversationMessageInput" type="text" placeholder="اكتب رسالتك" />
+            <button class="btn btn-secondary chat-send-inline-btn" id="sendConversationMessageBtn" type="button">إرسال</button>
+          </div>
+        </div>
+      ` : ""}
+    </div>
+  `;
+
+  document.getElementById("sendConversationMessageBtn")?.addEventListener("click", async () => {
+    const input = document.getElementById("conversationMessageInput");
+    const message = input?.value?.trim() || "";
+    if (!message) {
+      showToast("اكتب رسالة أولًا");
+      return;
+    }
+
+    try {
+      await api(`/api/conversations/${conversation.id}/messages`, {
+        method: "POST",
+        body: JSON.stringify({ message })
+      });
+      input.value = "";
+      await openConversation(conversation.id);
+      await loadMessages();
+    } catch (error) {
+      showToast(error.message);
+    }
+  });
+
+  document.getElementById("conversationReportBtn")?.addEventListener("click", async () => {
+    await openReportModal({
+      conversationId: conversation.id,
+      productId: conversation.product?.id,
+      productName: conversation.product?.name,
+      reportedUserId: conversation.sellerId,
+      reportedUserName: conversation.seller?.storeName || conversation.seller?.fullName
+    });
+  });
+
+  conversationDetails.querySelectorAll("[data-open-linked-order]").forEach((btn) => {
+    btn.addEventListener("click", async () => {
+      if (typeof window.navigateTo === "function") {
+        await window.navigateTo(`/order/${Number(btn.dataset.openLinkedOrder)}`);
+        return;
+      }
+      showView("orders");
+      await loadOrders();
+      await loadOrderDetails(Number(btn.dataset.openLinkedOrder));
+    });
+  });
+
+  const thread = document.getElementById("activeChatThread");
+  if (thread) {
+    thread.scrollTop = thread.scrollHeight;
+  }
+}
+
+function renderConversationsList(conversations, activeConversationId = null) {
+  const listEl = document.getElementById("conversationsList");
+  if (!listEl) return;
+
+  const { filtered, searchValue } = getFilteredConversations(conversations);
+
+  if (!filtered.length) {
+    listEl.innerHTML = `
+      <div class="conversation-list-empty">
+        <div class="conversation-list-empty-icon">+</div>
+        <div class="conversation-empty-title">${searchValue ? "لا توجد نتائج مطابقة" : "لا توجد محادثات بعد"}</div>
+        <div class="conversation-empty-text">${searchValue ? "جرّب كلمة مختلفة أو امسح البحث لعرض كل المحادثات." : "ستظهر هنا الرسائل المرتبطة بمنتجاتك وطلباتك بشكل أوضح."}</div>
+      </div>
+    `;
+    if (mobileConversationCurrent) mobileConversationCurrent.textContent = searchValue ? "لا توجد نتائج" : "لا توجد محادثات";
+    if (mobileConversationsMenu) mobileConversationsMenu.innerHTML = "";
+    setMobileConversationPickerOpen(false);
+    return;
+  }
+
+  listEl.innerHTML = filtered.map((conversation) => createConversationCardMarkup(conversation, activeConversationId)).join("");
+
+  const activeConversation = filtered.find((conversation) => conversation.id === activeConversationId) || filtered[0];
+  if (mobileConversationCurrent) {
+    mobileConversationCurrent.textContent = activeConversation ? getConversationDisplayName(activeConversation) : "اختر محادثة";
+  }
+
+  if (mobileConversationsMenu) {
+    mobileConversationsMenu.innerHTML = filtered.map((conversation) => `
+      <button class="mobile-conversation-option ${activeConversationId === conversation.id ? "is-active" : ""}" data-open-conversation="${conversation.id}" type="button">
+        <strong>${escapeHtml(getConversationDisplayName(conversation))}</strong>
+        <span>${escapeHtml(conversation.product?.name || "بدون منتج")}</span>
+      </button>
+    `).join("");
+  }
+
+  const bindOpenConversation = (scope) => {
+    scope?.querySelectorAll("[data-open-conversation]").forEach((item) => {
+      item.addEventListener("click", async (event) => {
+        const conversationId = Number(item.dataset.openConversation);
+        setMobileConversationPickerOpen(false);
+        if (typeof window.navigateTo === "function") {
+          event.preventDefault();
+          await window.navigateTo(`/conversation/${conversationId}`);
+          return;
+        }
+        await openConversation(conversationId);
+      });
+    });
+  };
+
+  bindOpenConversation(listEl);
+  bindOpenConversation(mobileConversationsMenu);
+}
+
+function renderConversationDetails(conversation) {
+  if (!conversationDetails) return;
+
+  if (!conversation) {
+    conversationDetails.innerHTML = `<div class="conversation-empty-panel whatsapp-empty-panel"><h3>اختر محادثة</h3><p class="muted">ستظهر الرسائل هنا داخل إطار واضح مع تمرير مستقل للرسائل.</p></div>`;
+    return;
+  }
+
+  const canReply = conversation.status === "open";
+  const counterparty = state.user?.id === conversation.sellerId
+    ? (conversation.buyer?.fullName || "مشتري")
+    : (conversation.seller?.storeName || conversation.seller?.fullName || "متجر");
+  const linkedOrders = Array.isArray(conversation.linkedOrders) ? conversation.linkedOrders : [];
+
+  conversationDetails.innerHTML = `
+    <div class="chat-layout whatsapp-chat-layout">
+      <div class="chat-header whatsapp-chat-header">
+        <div class="chat-person-block">
+          <div class="chat-person-avatar">${escapeHtml((counterparty || "م")[0] || "م")}</div>
+          <div>
+            <h3>${escapeHtml(counterparty)}</h3>
+            <div class="muted">المنتج: ${escapeHtml(conversation.product?.name || "")}</div>
+          </div>
+        </div>
+        <div class="chat-header-meta">
+          <span class="chat-chip">${escapeHtml(formatConversationType(conversation.conversationType))}</span>
+          <span class="chat-chip">الحالة: ${escapeHtml(formatConversationStatus(conversation.status || ""))}</span>
+          <span class="chat-chip light">${escapeHtml(conversation.seller?.storeName || conversation.seller?.fullName || "")}</span>
+          <button class="btn btn-light" id="conversationReportBtn" type="button">بلاغ</button>
+        </div>
+      </div>
+
+      ${linkedOrders.length ? `
+        <div class="deal-strip">
+          ${linkedOrders.map((order) => `
+            <div class="compact-card linked-orders-card chat-linked-order">
+              <div class="deal-head">
+                <div class="linked-order-summary">
+                  <strong>طلب شراء #${order.id}</strong>
+                  <div class="muted">عدد العناصر: ${order.itemsCount || 0} - الإجمالي: ${formatPrice(order.totalAmount || 0, conversation.product?.currency || "ل.س")}</div>
+                </div>
+                <span class="deal-status ${getOrderStatusTone(order.status)}">${escapeHtml(formatOrderStatus(order.status))}</span>
+              </div>
+              <div class="deal-actions">
+                <button class="btn btn-light" data-open-linked-order="${order.id}" type="button">عرض الطلب</button>
+              </div>
+            </div>
+          `).join("")}
+        </div>
+      ` : ""}
+
+      <div class="chat-thread whatsapp-thread" id="activeChatThread">
+        ${renderConversationMessages(conversation.messages || [])}
+      </div>
+
+      ${canReply ? `
+        <div class="chat-composer whatsapp-composer">
+          <div class="chat-input-shell whatsapp-input-shell">
+            <input class="field chat-textarea whatsapp-textarea chat-singleline-input" id="conversationMessageInput" type="text" placeholder="اكتب رسالتك" />
+            <button class="btn btn-secondary chat-send-inline-btn" id="sendConversationMessageBtn" type="button">إرسال</button>
+          </div>
+        </div>
+      ` : ""}
+    </div>
+  `;
+
+  const sendConversationMessage = async () => {
+    const input = document.getElementById("conversationMessageInput");
+    const message = input?.value?.trim() || "";
+    if (!message) {
+      showToast("اكتب رسالة أولًا");
+      return;
+    }
+
+    try {
+      await api(`/api/conversations/${conversation.id}/messages`, {
+        method: "POST",
+        body: JSON.stringify({ message })
+      });
+      input.value = "";
+      await openConversation(conversation.id);
+      await loadMessages();
+    } catch (error) {
+      showToast(error.message || "تعذر إرسال الرسالة");
+    }
+  };
+
+  document.getElementById("sendConversationMessageBtn")?.addEventListener("click", sendConversationMessage);
+  document.getElementById("conversationMessageInput")?.addEventListener("keydown", async (event) => {
+    if (event.key !== "Enter" || event.shiftKey) return;
+    event.preventDefault();
+    await sendConversationMessage();
+  });
+
+  document.getElementById("conversationReportBtn")?.addEventListener("click", async () => {
+    await openReportModal({
+      conversationId: conversation.id,
+      productId: conversation.product?.id,
+      productName: conversation.product?.name,
+      reportedUserId: conversation.sellerId,
+      reportedUserName: conversation.seller?.storeName || conversation.seller?.fullName
+    });
+  });
+
+  conversationDetails.querySelectorAll("[data-open-linked-order]").forEach((btn) => {
+    btn.addEventListener("click", async () => {
+      if (typeof window.navigateTo === "function") {
+        await window.navigateTo(`/order/${Number(btn.dataset.openLinkedOrder)}`);
+        return;
+      }
+      showView("orders");
+      await loadOrders();
+      await loadOrderDetails(Number(btn.dataset.openLinkedOrder));
+    });
+  });
+
+  const thread = document.getElementById("activeChatThread");
+  if (thread) {
+    thread.scrollTop = thread.scrollHeight;
+  }
 }
 
 bootstrapPromise.finally(async () => {
