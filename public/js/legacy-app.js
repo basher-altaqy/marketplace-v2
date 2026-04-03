@@ -209,12 +209,21 @@ function appendMessageToThread(message) {
   const thread = document.getElementById("activeChatThread");
   if (!thread || !message) return false;
 
-  const wrapper = document.createElement("div");
-  wrapper.innerHTML = renderConversationMessages([message]).trim();
-  const node = wrapper.firstElementChild;
-  if (!node) return false;
+  const markup = renderConversationMessages([message]).trim();
+  if (!markup) return false;
 
-  thread.appendChild(node);
+  if (thread.querySelector(".muted")) {
+    thread.innerHTML = "";
+  }
+
+  const template = document.createElement("template");
+  template.innerHTML = markup;
+  const nodes = Array.from(template.content.childNodes).filter((node) => {
+    return node.nodeType !== Node.TEXT_NODE || node.textContent.trim();
+  });
+
+  if (!nodes.length) return false;
+  nodes.forEach((node) => thread.appendChild(node));
   thread.scrollTop = thread.scrollHeight;
   return true;
 }
@@ -3253,7 +3262,6 @@ function renderConversationMessages(messages = []) {
     return `
       ${daySeparator}
       <div class="chat-bubble ${message.senderId === state.user?.id ? "is-me is-own" : "is-other"}">
-        <div class="chat-sender">${escapeHtml(message.senderName || "")}</div>
         <div class="chat-body-row">
           <div class="chat-body">${escapeHtml(message.body || "")}</div>
           <span class="chat-time-inline">${escapeHtml(formatChatTime(message.createdAt))}</span>
