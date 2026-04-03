@@ -4670,6 +4670,10 @@ async function loadVerificationStatus() {
   try {
     const data = await api("/api/auth/verification-status");
     state.verification = data.verification || null;
+    if (state.verification && state.verification.verificationEnabled === false) {
+      closeVerificationModalUi();
+      return;
+    }
     renderVerificationStatus(state.verification);
 
     const shouldPrompt = state.verification &&
@@ -4683,6 +4687,10 @@ async function loadVerificationStatus() {
 async function requestVerificationCode() {
   const channel = document.getElementById("verificationChannel")?.value || "phone";
   const hintBox = document.getElementById("verificationHintBox");
+  if (state.verification && state.verification.verificationEnabled === false) {
+    showToast("ميزة التحقق بالرمز موقوفة مؤقتا");
+    return;
+  }
   try {
     const data = await api("/api/auth/verification/request", {
       method: "POST",
@@ -4704,6 +4712,11 @@ async function requestVerificationCode() {
 async function submitVerificationCode() {
   const channel = document.getElementById("verificationChannel")?.value || "phone";
   const code = document.getElementById("verificationCodeInput")?.value?.trim() || "";
+  if (state.verification && state.verification.verificationEnabled === false) {
+    showToast("ميزة التحقق بالرمز موقوفة مؤقتا");
+    closeVerificationModalUi();
+    return;
+  }
   if (!code) {
     showToast("أدخل رمز التحقق أولاً");
     return;

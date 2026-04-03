@@ -1,6 +1,7 @@
 const crypto = require('crypto');
 const { query } = require('../db/pool');
 const { logSystemEvent } = require('./platform.service');
+const { VERIFICATION_ENABLED } = require('../config/env');
 
 const challengeStore = new Map();
 const abuseStore = new Map();
@@ -128,7 +129,23 @@ function mapVerificationStatus(row) {
   };
 }
 
+function buildVerificationDisabledStatus(userId) {
+  return {
+    userId: Number(userId),
+    email: null,
+    phone: null,
+    whatsapp: null,
+    isEmailVerified: true,
+    isPhoneVerified: true,
+    verificationStatus: 'disabled',
+    verificationEnabled: false
+  };
+}
+
 async function getUserVerificationStatus(userId) {
+  if (!VERIFICATION_ENABLED) {
+    return buildVerificationDisabledStatus(userId);
+  }
   const result = await query(
     `SELECT id, email, phone, phone_number, whatsapp, is_email_verified, is_phone_verified, verification_status
      FROM users
@@ -136,10 +153,23 @@ async function getUserVerificationStatus(userId) {
      LIMIT 1`,
     [Number(userId)]
   );
-  return mapVerificationStatus(result.rows[0]);
+  return {
+    ...mapVerificationStatus(result.rows[0]),
+    verificationEnabled: true
+  };
 }
 
 async function createVerificationCode(userId, channel) {
+  if (!VERIFICATION_ENABLED) {
+    return {
+      verificationId: null,
+      channel: String(channel || '').trim().toLowerCase() || 'phone',
+      destination: '-',
+      expiresAt: null,
+      previewCode: null,
+      disabled: true
+    };
+  }
   const safeChannel = String(channel || '').trim().toLowerCase();
   if (!['email', 'phone', 'whatsapp'].includes(safeChannel)) {
     throw new Error('قناة التحقق غير مدعومة.');
@@ -195,6 +225,9 @@ async function createVerificationCode(userId, channel) {
 }
 
 async function verifySubmittedCode(userId, channel, code) {
+  if (!VERIFICATION_ENABLED) {
+    return buildVerificationDisabledStatus(userId);
+  }
   const safeChannel = String(channel || '').trim().toLowerCase();
   const safeCode = String(code || '').trim();
   if (!safeCode) {

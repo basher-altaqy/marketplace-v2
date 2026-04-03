@@ -2,6 +2,7 @@
   const TOKEN_KEY = 'adminToken';
   const ADMIN_KEY = 'adminUser';
   const DRAGON_KEY = 'dragonEffectEnabled';
+  const DRAGON_EFFECT_TEMPORARILY_DISABLED = true;
   const SECTION_TITLES = {
     overview: {
       title: 'نظرة عامة',
@@ -44,7 +45,7 @@
   const state = {
     currentSection: 'overview',
     admin: JSON.parse(localStorage.getItem(ADMIN_KEY) || 'null'),
-    dragonEffectEnabled: localStorage.getItem(DRAGON_KEY) !== 'false',
+    dragonEffectEnabled: DRAGON_EFFECT_TEMPORARILY_DISABLED ? false : localStorage.getItem(DRAGON_KEY) !== 'false',
     overview: null,
     users: [],
     products: [],
@@ -139,6 +140,13 @@
   }
 
   function setDragonEffectEnabled(enabled) {
+    if (DRAGON_EFFECT_TEMPORARILY_DISABLED) {
+      state.dragonEffectEnabled = false;
+      localStorage.setItem(DRAGON_KEY, 'false');
+      renderDragonEffectControl();
+      showMessage('ميزة التنين موقوفة مؤقتا من الكود.', 'success');
+      return;
+    }
     state.dragonEffectEnabled = Boolean(enabled);
     localStorage.setItem(DRAGON_KEY, state.dragonEffectEnabled ? 'true' : 'false');
     renderDragonEffectControl();
@@ -146,6 +154,13 @@
 
   function renderDragonEffectControl() {
     if (!elements.dragonEffectStatusText || !elements.dragonEffectToggleBtn) return;
+    if (DRAGON_EFFECT_TEMPORARILY_DISABLED) {
+      elements.dragonEffectStatusText.textContent = 'الميزة موقوفة مؤقتا على مستوى الموقع.';
+      elements.dragonEffectToggleBtn.textContent = 'موقوف مؤقتا';
+      elements.dragonEffectToggleBtn.className = 'action-button secondary';
+      elements.dragonEffectToggleBtn.disabled = true;
+      return;
+    }
     elements.dragonEffectStatusText.textContent = state.dragonEffectEnabled
       ? 'الميزة مفعلة حاليًا في الواجهة العامة على هذا المتصفح.'
       : 'الميزة متوقفة حاليًا في الواجهة العامة على هذا المتصفح.';

@@ -1,8 +1,10 @@
 import { initDragonEffect } from './effects/dragon.effect.js';
 
 const DRAGON_KEY = 'dragonEffectEnabled';
+const DRAGON_EFFECT_TEMPORARILY_DISABLED = true;
 
 function isDragonEffectEnabled() {
+  if (DRAGON_EFFECT_TEMPORARILY_DISABLED) return false;
   return localStorage.getItem(DRAGON_KEY) !== 'false';
 }
 
@@ -17,7 +19,7 @@ window.addEventListener('load', () => {
     syncFooterYear();
 
     if (!isDragonEffectEnabled()) {
-      console.info('[DragonEffect] disabled from admin settings.');
+      console.info('[DragonEffect] temporarily disabled.');
       return;
     }
 

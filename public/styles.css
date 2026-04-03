@@ -7360,3 +7360,215 @@ body {
     font-size: 10px;
   }
 }
+
+/* ===== Restored Conversation UI ===== */
+.chat-header,
+.whatsapp-chat-header {
+  padding: 6px 8px;
+  margin-bottom: 0;
+  gap: 8px;
+}
+
+.chat-header .chat-person-block > div > .muted,
+.whatsapp-chat-header .chat-person-block > div > .muted {
+  display: none;
+}
+
+.chat-person-block {
+  gap: 6px;
+}
+
+.chat-person-avatar {
+  width: 28px;
+  height: 28px;
+  min-width: 28px;
+  min-height: 28px;
+  border-radius: 9px;
+  font-size: 11px;
+}
+
+.chat-header h3,
+.whatsapp-chat-header h3 {
+  margin: 0;
+  font-size: 12px;
+  line-height: 1.1;
+}
+
+.chat-header-meta {
+  gap: 4px;
+}
+
+.chat-chip {
+  padding: 2px 6px;
+  font-size: 9px;
+  line-height: 1.1;
+}
+
+.chat-header-meta .btn {
+  height: 24px;
+  padding: 0 8px;
+  font-size: 10px;
+}
+
+.deal-strip {
+  gap: 4px;
+  padding: 6px 8px 0;
+}
+
+.linked-orders-card.chat-linked-order {
+  gap: 4px;
+  padding: 6px 8px;
+  border-radius: 12px;
+}
+
+.chat-linked-order .deal-head {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 6px;
+  align-items: start;
+}
+
+.chat-linked-order .linked-order-summary strong {
+  display: block;
+  margin-bottom: 1px;
+  font-size: 11px;
+  line-height: 1.1;
+}
+
+.chat-linked-order .linked-order-summary .muted {
+  font-size: 9px;
+  line-height: 1.15;
+}
+
+.chat-linked-order .deal-status {
+  padding: 2px 6px;
+  font-size: 9px;
+}
+
+.chat-linked-order .deal-actions {
+  margin-top: 0;
+  justify-content: flex-end;
+}
+
+.chat-linked-order .deal-actions .btn {
+  height: 24px;
+  padding: 0 8px;
+  font-size: 10px;
+}
+
+.chat-composer,
+.whatsapp-composer {
+  padding: 6px 8px 8px;
+}
+
+.chat-input-shell,
+.whatsapp-input-shell {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  width: min(100%, 360px);
+}
+
+.chat-singleline-input,
+.chat-textarea,
+.whatsapp-textarea {
+  display: block;
+  flex: 1 1 auto;
+  width: auto;
+  min-width: 0;
+  min-height: 28px;
+  height: 28px;
+  max-height: 28px;
+  padding: 0 10px;
+  border-radius: 999px;
+  line-height: 28px;
+  resize: none;
+}
+
+.chat-send-inline-btn {
+  flex: 0 0 auto;
+  min-width: 58px;
+  height: 28px;
+  padding: 0 12px;
+  border-radius: 999px;
+  font-size: 12px;
+  font-weight: 600;
+  box-shadow: none;
+}
+
+@media (max-width: 900px) {
+  .chat-header,
+  .whatsapp-chat-header {
+    padding: 5px 7px;
+  }
+
+  .chat-person-avatar {
+    width: 26px;
+    height: 26px;
+    min-width: 26px;
+    min-height: 26px;
+    border-radius: 8px;
+    font-size: 10px;
+  }
+
+  .chat-header h3,
+  .whatsapp-chat-header h3 {
+    font-size: 11px;
+  }
+
+  .chat-chip {
+    padding: 2px 5px;
+    font-size: 8px;
+  }
+
+  .chat-header-meta .btn,
+  .chat-linked-order .deal-actions .btn {
+    height: 22px;
+    padding: 0 7px;
+    font-size: 9px;
+  }
+
+  .deal-strip {
+    padding: 5px 7px 0;
+  }
+
+  .linked-orders-card.chat-linked-order {
+    padding: 5px 7px;
+    gap: 3px;
+  }
+
+  .chat-linked-order .deal-head {
+    grid-template-columns: 1fr;
+  }
+
+  .chat-linked-order .linked-order-summary strong {
+    font-size: 10px;
+  }
+
+  .chat-linked-order .linked-order-summary .muted,
+  .chat-linked-order .deal-status {
+    font-size: 8px;
+  }
+
+  .chat-composer,
+  .whatsapp-composer {
+    padding: 6px 7px 7px;
+  }
+
+  .chat-singleline-input,
+  .chat-textarea,
+  .whatsapp-textarea {
+    min-height: 26px;
+    height: 26px;
+    max-height: 26px;
+    line-height: 26px;
+    padding: 0 9px;
+  }
+
+  .chat-send-inline-btn {
+    min-width: 52px;
+    height: 26px;
+    padding: 0 10px;
+    font-size: 11px;
+  }
+}
