@@ -50,6 +50,7 @@ const V1_FLAGS = {
 const V1_ALLOWED_ORDER_TRANSITIONS = new Set(["seller_confirmed", "cancelled"]);
 
 state.submissionState = state.submissionState || {};
+window.marketplaceApp = window.marketplaceApp || {};
 
 function isV1FeatureEnabled(feature) {
   return Boolean(V1_FLAGS[feature]);
