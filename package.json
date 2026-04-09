@@ -11,6 +11,7 @@
     "db:bootstrap": "node scripts/db-bootstrap.js",
     "db:reset": "node scripts/db-reset.js",
     "db:schema": "node scripts/db-bootstrap.js --schema-only",
+    "seed:products": "node scripts/seed-products.js",
     "start": "node server.js",
     "dev": "node server.js"
   },
