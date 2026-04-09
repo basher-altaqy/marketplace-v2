@@ -12,6 +12,7 @@
     "db:reset": "node scripts/db-reset.js",
     "db:schema": "node scripts/db-bootstrap.js --schema-only",
     "seed:products": "node scripts/seed-products.js",
+    "seed:run": "npm run seed:products",
     "start": "node server.js",
     "dev": "node server.js"
   },
