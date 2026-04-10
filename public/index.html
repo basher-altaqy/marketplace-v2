@@ -18,7 +18,48 @@
           </div>
         </a>
 
-        <form class="searchbar searchbar-glow" id="globalSearchForm">
+        <nav class="header-nav-links" aria-label="التنقل الرئيسي">
+          <a class="header-nav-link is-active" href="/" data-route="/">الرئيسية</a>
+          <button class="header-nav-link" type="button" data-home-scroll="filtersSection">المنتجات</button>
+          <button class="header-nav-link" type="button" data-home-scroll="benefitsSection">لماذا نحن</button>
+        </nav>
+
+        <div class="nav-actions header-nav-row">
+          <div class="mobile-header-menu" id="mobileHeaderMenu">
+            <button class="btn btn-light mobile-header-menu-toggle" id="mobileHeaderMenuToggle" type="button" aria-expanded="false" aria-label="فتح القائمة" title="فتح القائمة">
+              <span aria-hidden="true">☰</span>
+            </button>
+            <div class="mobile-header-dropdown hidden" id="mobileHeaderDropdown"></div>
+          </div>
+          <button class="btn btn-light header-icon-btn search-toggle-btn" id="navSearchToggleBtn" type="button" aria-label="فتح البحث" title="فتح البحث">
+            <span aria-hidden="true">⌕</span>
+            <span>بحث</span>
+          </button>
+          <button class="btn btn-outline" id="navLoginBtn">تسجيل الدخول</button>
+          <button class="btn btn-primary" id="navAddProductBtn">إضافة منتج</button>
+          <button class="btn btn-light hidden" id="navProfileBtn">الملف الشخصي</button>
+          <button class="btn btn-light hidden" id="navMessagesBtn">المحادثات<span id="navMessagesBadge" class="cart-badge hidden">0</span></button>
+          <button class="btn btn-light hidden" id="navNotificationsBtn">التنبيهات<span id="navNotificationsBadge" class="cart-badge hidden">0</span></button>
+          <button class="btn btn-light hidden" id="navFavoritesBtn">المفضلة<span id="navFavoritesBadge" class="cart-badge hidden">0</span></button>
+          <button class="btn btn-light hidden cart-nav-btn" id="navCartBtn">السلة<span id="navCartBadge" class="cart-badge hidden">0</span></button>
+          <button class="btn btn-light hidden" id="navOrdersBtn">الطلبات<span id="navOrdersBadge" class="cart-badge hidden">0</span></button>
+          <button class="btn btn-light hidden" id="navDashboardBtn">لوحتي</button>
+          <button class="btn btn-light hidden" id="navAdminBtn">الإدارة</button>
+          <button class="btn btn-outline hidden" id="navLogoutBtn">خروج</button>
+        </div>
+      </div>
+    </header>
+
+    <div class="search-area" id="searchArea" aria-hidden="true">
+      <div class="search-area-backdrop"></div>
+      <div class="search-area-panel">
+        <button class="search-close-btn" id="closeSearchAreaBtn" type="button" aria-label="إغلاق البحث">×</button>
+        <div class="search-area-copy">
+          <div class="search-area-kicker">بحث سريع</div>
+          <h3>ابحث عن المنتج الذي تحتاجه</h3>
+          <p>اكتب اسم المنتج أو التصنيف أو نوع البضاعة وسننقلك مباشرة إلى نتائج الصفحة الرئيسية.</p>
+        </div>
+        <form class="searchbar searchbar-glow searchbar-overlay" id="globalSearchForm">
           <input
             id="globalSearchInput"
             type="search"
@@ -26,24 +67,12 @@
           />
           <button class="btn btn-secondary" type="submit">بحث</button>
         </form>
-
-        <div class="nav-actions header-nav-row">
-          <button class="btn btn-outline" id="navLoginBtn">تسجيل الدخول</button>
-          <button class="btn btn-primary" id="navAddProductBtn">إضافة منتج</button>
-          <button class="btn btn-light hidden" id="navProfileBtn">الملف الشخصي</button>
-          <button class="btn btn-light hidden" id="navMessagesBtn">المحادثات<span id="navMessagesBadge" class="cart-badge hidden">0</span></button>
-          <button class="btn btn-light hidden" id="navFavoritesBtn">المفضلة<span id="navFavoritesBadge" class="cart-badge hidden">0</span></button>
-          <button class="btn btn-light hidden cart-nav-btn" id="navCartBtn">السلة<span id="navCartBadge" class="cart-badge hidden">0</span></button>
-          <button class="btn btn-light hidden" id="navOrdersBtn">الطلبات<span id="navOrdersBadge" class="cart-badge hidden">0</span></button>
-          <button class="btn btn-light hidden" id="navDashboardBtn">لوحتي</button>
-          <button class="btn btn-outline hidden" id="navLogoutBtn">خروج</button>
-        </div>
       </div>
-    </header>
+    </div>
 
     <main class="container main-space">
       <section id="homeView" class="view active">
-        <section class="hero hero-compact hero-bleed">
+        <section class="hero hero-fruitkha hero-bleed" id="heroIntroSection">
           <div class="hero-card hero-poster">
             <div class="hero-overlay"></div>
             <div class="hero-shell">
@@ -51,18 +80,44 @@
                 <div class="hero-kicker" id="heroKicker">منصة محلية متجددة</div>
                 <h1 id="heroTitle">بضاعة بلدي</h1>
                 <p id="heroDescription">
-                  مساحة عرض أوسع للتجار والمزارعين والحرفيين، مع تصنيفات واضحة،
-                  بطاقات أوضح، ومحادثات أبسط للوصول إلى المنتج المناسب بسرعة.
+                  مساحة عرض أوسع للتجار والحرفيين والمنتجات المحلية، مع تصفح أسرع، بطاقات أوضح، وتجربة شراء أكثر أناقة.
                 </p>
-              </div>
-              <div class="hero-media-frame">
-                <div class="hero-media-art" id="heroPosterMedia" aria-hidden="true"></div>
+                <div class="hero-actions">
+                  <a class="boxed-btn" href="/" data-home-scroll="filtersSection">تصفح المنتجات</a>
+                  <button class="bordered-btn" id="heroSellerCtaBtn" type="button">ابدأ البيع</button>
+                </div>
               </div>
             </div>
           </div>
         </section>
 
-        <section class="section">
+        <section class="section benefits-section" id="benefitsSection">
+          <div class="hero-benefits-shell">
+            <article class="hero-benefit-card">
+              <div class="hero-benefit-icon" aria-hidden="true">◌</div>
+              <div class="hero-benefit-copy">
+                <h3>عرض أسرع</h3>
+                <p>بطاقات أوضح ووصول أسرع للمنتج وتجربة تصفح أكثر ترتيباً من أول نظرة.</p>
+              </div>
+            </article>
+            <article class="hero-benefit-card">
+              <div class="hero-benefit-icon" aria-hidden="true">◎</div>
+              <div class="hero-benefit-copy">
+                <h3>محادثة مباشرة</h3>
+                <p>تواصل مع البائع فوراً من داخل المنصة وتابع الطلب أو التوصيل بسهولة أكبر.</p>
+              </div>
+            </article>
+            <article class="hero-benefit-card">
+              <div class="hero-benefit-icon" aria-hidden="true">◍</div>
+              <div class="hero-benefit-copy">
+                <h3>متاجر محلية</h3>
+                <p>واجهة افتتاحية أقوى تبرز المتاجر المحلية وتمنحها حضوراً أقرب للمتاجر الاحترافية.</p>
+              </div>
+            </article>
+          </div>
+        </section>
+
+        <section class="section" id="filtersSection">
           <div class="filters-shell">
             <div class="filters-bar">
               <input class="field" id="filterKeyword" placeholder="كلمة مفتاحية" />

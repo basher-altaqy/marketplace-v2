@@ -9,7 +9,7 @@ const { assertDatabaseReady } = require('../src/services/bootstrap.service');
 // ============================================
 
 const SELLER_COUNT = 3;
-const PRODUCTS_PER_SELLER = 12;
+const PRODUCTS_PER_SELLER = 14;
 const TEST_PASSWORD = 'Seller12345';
 const REGION = 'Damascus';
 const CURRENCY = 'SYP';

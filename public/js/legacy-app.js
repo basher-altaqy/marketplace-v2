@@ -34,7 +34,8 @@ const state = {
   reportDraft: null,
   dashboardSummary: null,
   metaLoaded: false,
-  mobileConversationsOpen: false
+  mobileConversationsOpen: false,
+  mobileHeaderMenuOpen: false
 };
 
 const V1_FLAGS = {
@@ -279,12 +280,16 @@ const sortBy = document.getElementById("sortBy");
 
 const globalSearchForm = document.getElementById("globalSearchForm");
 const globalSearchInput = document.getElementById("globalSearchInput");
+const searchArea = document.getElementById("searchArea");
+const navSearchToggleBtn = document.getElementById("navSearchToggleBtn");
+const closeSearchAreaBtn = document.getElementById("closeSearchAreaBtn");
 const siteBrandTitle = document.getElementById("siteBrandTitle");
 const siteBrandTagline = document.getElementById("siteBrandTagline");
 const heroKicker = document.getElementById("heroKicker");
 const heroTitle = document.getElementById("heroTitle");
 const heroDescription = document.getElementById("heroDescription");
 const heroPosterMedia = document.getElementById("heroPosterMedia");
+const heroSellerCtaBtn = document.getElementById("heroSellerCtaBtn");
 
 const navLoginBtn = document.getElementById("navLoginBtn");
 const navAddProductBtn = document.getElementById("navAddProductBtn");
@@ -302,6 +307,9 @@ const navOrdersBadge = document.getElementById("navOrdersBadge");
 const navAdminBtn = document.getElementById("navAdminBtn");
 const navDashboardBtn = document.getElementById("navDashboardBtn");
 const navLogoutBtn = document.getElementById("navLogoutBtn");
+const mobileHeaderMenu = document.getElementById("mobileHeaderMenu");
+const mobileHeaderMenuToggle = document.getElementById("mobileHeaderMenuToggle");
+const mobileHeaderDropdown = document.getElementById("mobileHeaderDropdown");
 
 const catalogBackBtn = document.getElementById("catalogBackBtn");
 const productBackBtn = document.getElementById("productBackBtn");
@@ -625,6 +633,42 @@ function syncTopbarScrollState() {
   topbar.classList.toggle("topbar-scrolled", window.scrollY > 10);
 }
 
+function openSearchArea() {
+  if (!searchArea) return;
+  searchArea.classList.add("search-active");
+  searchArea.setAttribute("aria-hidden", "false");
+  document.body.classList.add("search-area-open");
+  window.setTimeout(() => globalSearchInput?.focus(), 80);
+}
+
+function closeSearchArea() {
+  if (!searchArea) return;
+  searchArea.classList.remove("search-active");
+  searchArea.setAttribute("aria-hidden", "true");
+  document.body.classList.remove("search-area-open");
+}
+
+async function goToHomeSection(sectionId) {
+  const scrollToTarget = () => {
+    const section = document.getElementById(sectionId);
+    section?.scrollIntoView({ behavior: "smooth", block: "start" });
+  };
+
+  if (!homeView?.classList.contains("hidden")) {
+    scrollToTarget();
+    return;
+  }
+
+  if (typeof window.navigateTo === "function") {
+    await window.navigateTo("/");
+  } else {
+    if (!state.products.length) await loadProducts();
+    showView("home");
+  }
+
+  window.setTimeout(scrollToTarget, 120);
+}
+
 function openDeliveryInfoModal(isAvailable) {
   if (!deliveryInfoModal || !deliveryInfoTitle || !deliveryInfoMessage) return;
   deliveryInfoTitle.textContent = "حالة التوصيل";
@@ -735,6 +779,45 @@ function refreshNav() {
   navAddProductBtn?.classList.toggle("hidden", !isSeller);
   navAdminBtn?.classList.toggle("hidden", !isAdmin || !isV1FeatureEnabled("admin"));
   refreshNavBadges();
+  renderMobileHeaderMenu();
+}
+
+function setMobileHeaderMenuOpen(nextOpen) {
+  state.mobileHeaderMenuOpen = Boolean(nextOpen);
+  mobileHeaderMenu?.classList.toggle("is-open", state.mobileHeaderMenuOpen);
+  mobileHeaderDropdown?.classList.toggle("hidden", !state.mobileHeaderMenuOpen);
+  mobileHeaderMenuToggle?.setAttribute("aria-expanded", state.mobileHeaderMenuOpen ? "true" : "false");
+}
+
+function renderMobileHeaderMenu() {
+  if (!mobileHeaderDropdown) return;
+  const hasUser = !!state.user;
+  const isBuyer = hasUser && isBuyerUser();
+  const isSeller = hasUser && isSellerUser();
+  const isAdmin = hasUser && isAdminUser();
+
+  const items = [
+    `<button class="mobile-header-dropdown-item" data-mobile-nav-action="home" type="button">الرئيسية</button>`,
+    `<button class="mobile-header-dropdown-item" data-mobile-nav-action="filtersSection" type="button">المنتجات</button>`,
+    `<button class="mobile-header-dropdown-item" data-mobile-nav-action="benefitsSection" type="button">لماذا نحن</button>`
+  ];
+
+  if (!hasUser) {
+    items.push(`<button class="mobile-header-dropdown-item" data-mobile-nav-action="login" type="button">تسجيل الدخول</button>`);
+  } else {
+    items.push(`<button class="mobile-header-dropdown-item" data-mobile-nav-action="profile" type="button">الملف الشخصي</button>`);
+    items.push(`<button class="mobile-header-dropdown-item" data-mobile-nav-action="messages" type="button">المحادثات</button>`);
+    if (isV1FeatureEnabled("notifications")) items.push(`<button class="mobile-header-dropdown-item" data-mobile-nav-action="notifications" type="button">التنبيهات</button>`);
+    if (isBuyer) items.push(`<button class="mobile-header-dropdown-item" data-mobile-nav-action="favorites" type="button">المفضلة</button>`);
+    if (isBuyer) items.push(`<button class="mobile-header-dropdown-item" data-mobile-nav-action="cart" type="button">السلة</button>`);
+    items.push(`<button class="mobile-header-dropdown-item" data-mobile-nav-action="orders" type="button">الطلبات</button>`);
+    if (isSeller) items.push(`<button class="mobile-header-dropdown-item" data-mobile-nav-action="dashboard" type="button">لوحتي</button>`);
+    if (isSeller) items.push(`<button class="mobile-header-dropdown-item" data-mobile-nav-action="add-product" type="button">إضافة منتج</button>`);
+    if (isAdmin && isV1FeatureEnabled("admin")) items.push(`<button class="mobile-header-dropdown-item" data-mobile-nav-action="admin" type="button">الإدارة</button>`);
+    items.push(`<button class="mobile-header-dropdown-item is-danger" data-mobile-nav-action="logout" type="button">خروج</button>`);
+  }
+
+  mobileHeaderDropdown.innerHTML = items.join("");
 }
 
 function setNavBadge(element, count) {
@@ -1507,58 +1590,70 @@ function renderFilters() {
 
 
 function productCardHtml(product) {
-  const sellerName = escapeHtml(product.seller.storeName || product.seller.fullName || "");
+  const sellerName = escapeHtml(product.seller?.storeName || product.seller?.fullName || "");
+  const sellerId = Number(product.seller?.id || 0);
   const favoriteActive = isFavoriteProduct(product.id);
+  const favoriteLabel = favoriteActive ? "إزالة من المفضلة" : "إضافة إلى المفضلة";
+  const deliveryAvailable = Boolean(product.hasDeliveryService);
+  const deliveryLabel = deliveryAvailable ? "التوصيل متاح" : "التوصيل غير متاح";
+  const ratingValue = Number(product.seller?.averageRating || 0);
+  const ratingLabel = Number.isFinite(ratingValue) ? ratingValue.toFixed(1) : "0.0";
+  const ratingsCount = Number(product.seller?.ratingsCount || 0);
+  const viewsCount = Number(product.viewsCount || 0);
+  const regionLabel = product.region ? escapeHtml(product.region) : "غير محدد";
+  const title = escapeHtml(product.name || "");
   const productImage = product.image
-    ? `<div class="product-image product-image-wrap"><button class="favorite-fab ${favoriteActive ? "is-active-favorite" : ""}" data-toggle-favorite="${product.id}" type="button" aria-label="${favoriteActive ? "إزالة من المفضلة" : "إضافة إلى المفضلة"}">${favoriteActive ? "♥" : "♡"}</button><img src="${escapeHtml(product.image)}" alt="${escapeHtml(product.name)}" loading="lazy" /></div>`
-    : `<div class="product-image product-image-placeholder product-image-wrap"><button class="favorite-fab ${favoriteActive ? "is-active-favorite" : ""}" data-toggle-favorite="${product.id}" type="button" aria-label="${favoriteActive ? "إزالة من المفضلة" : "إضافة إلى المفضلة"}">${favoriteActive ? "♥" : "♡"}</button></div>`;
+    ? `<img src="${escapeHtml(product.image)}" alt="${title}" loading="lazy" />`
+    : `<div class="product-image-placeholder" aria-hidden="true"></div>`;
 
   let conditionClass = "";
   if (product.condition === "جديد") conditionClass = "condition-new";
   else if (product.condition === "مستعمل كالجديد") conditionClass = "condition-like-new";
   else if (product.condition === "مستعمل بحالة جيدة") conditionClass = "condition-used-good";
 
-  const canMessage = state.user && state.user.role !== "seller";
-
   return `
     <article class="product-card auction-card product-card-refined">
       ${product.condition ? `<div class="condition-ribbon ${conditionClass}">${escapeHtml(product.condition)}</div>` : ""}
-      ${productImage}
-      <div class="product-body product-body-pro">
-        <div class="product-title">${escapeHtml(product.name)}</div>
-        <div class="product-price product-price-centered product-price-hero">${formatPrice(product.price, product.currency)}</div>
-        <div class="product-meta-grid pro-meta-grid">
-          <span class="product-region-badge region-pill">
-            <span class="region-icon" aria-hidden="true">📍</span>
-            ${escapeHtml(product.region)}
-          </span>
-          <span class="views-badge compact-pill">
-            <span class="views-icon" aria-hidden="true">👁</span>
-            <span>${product.viewsCount}</span>
-          </span>
-        </div>
-
-        <div class="product-store-block product-store-block-pro">
-          <button class="store-link store-link-pro" type="button" data-open-seller="${product.seller.id}">${sellerName}</button>
-          <div class="store-rating store-rating-pro">
-            <span class="star-icon" aria-hidden="true">★</span>
-            ${product.seller.averageRating.toFixed(1)}
-            <span class="rating-count">(${product.seller.ratingsCount})</span>
-          </div>
-        </div>
-
-        ${deliveryIndicatorHtml(product, "product-delivery-pill")}
-
-        <div class="product-actions product-actions-pro">
-          <button class="btn btn-outline" data-open-product="${product.id}" type="button">عرض التفاصيل</button>
-        </div>
-        <div class="product-quick-actions">
-          <button class="icon-action-button" data-add-cart="${product.id}" type="button" aria-label="أضف إلى السلة" title="أضف إلى السلة">
+      <div class="product-image product-image-wrap">
+        ${productImage}
+        <span class="views-badge compact-pill product-views-corner">
+          <span class="views-icon" aria-hidden="true">👁</span>
+          <span>${viewsCount}</span>
+        </span>
+        <div class="product-image-overlay" aria-hidden="true"></div>
+        <div class="product-hover-actions" role="group" aria-label="إجراءات المنتج">
+          <button class="product-hover-action product-hover-action-favorite ${favoriteActive ? "is-active-favorite" : ""}" data-toggle-favorite="${product.id}" type="button" aria-label="${favoriteLabel}" title="${favoriteLabel}">
+            <span aria-hidden="true">${favoriteActive ? "♥" : "♡"}</span>
+          </button>
+          <button class="product-hover-action product-hover-action-detail" data-open-product="${product.id}" type="button" aria-label="عرض التفاصيل" title="عرض التفاصيل">
+            <span aria-hidden="true">⤢</span>
+          </button>
+          <button class="product-hover-action product-hover-action-cart" data-add-cart="${product.id}" type="button" aria-label="أضف إلى السلة" title="أضف إلى السلة">
             <span aria-hidden="true">🛒</span>
           </button>
-          <button class="icon-action-button" data-report-product="${product.id}" type="button" aria-label="إرسال بلاغ" title="إرسال بلاغ">
-            <span aria-hidden="true">⚑</span>
-          </button>
+        </div>
+      </div>
+      <div class="product-body product-body-pro">
+        <div class="product-title" title="${title}">${title}</div>
+        <div class="product-price-row">
+          <div class="product-price product-price-inline product-price-hero">${formatPrice(product.price, product.currency)}</div>
+        </div>
+        <div class="product-meta-grid pro-meta-grid">
+          <div class="product-meta-inline">
+            <span class="product-region-badge region-pill">
+              <span class="region-icon" aria-hidden="true">📌</span>
+              <span>${regionLabel}</span>
+            </span>
+            <button class="product-delivery-icon ${deliveryAvailable ? "is-available" : "is-unavailable"}" data-delivery-info="${deliveryAvailable ? "available" : "unavailable"}" type="button" aria-label="${deliveryLabel}" title="${deliveryLabel}">🚚</button>
+          </div>
+        </div>
+        <div class="product-store-block product-store-block-pro product-store-rating-row">
+          <a class="store-link store-link-pro product-store-inline" href="/seller/${sellerId}" data-route="/seller/${sellerId}" data-open-seller="${sellerId}" title="${sellerName}">${sellerName}</a>
+          <div class="product-rating-inline">
+            <span class="product-rating-star" aria-hidden="true">★</span>
+            ${ratingLabel}
+            <span class="rating-count">(${ratingsCount})</span>
+          </div>
         </div>
       </div>
     </article>
@@ -1659,6 +1754,35 @@ function getOrderProgressSteps(status) {
 }
 
 function bindProductActions(scope = document) {
+  const isTouchLikeViewport = window.matchMedia("(hover: none), (pointer: coarse)").matches;
+
+  if (isTouchLikeViewport) {
+    scope.querySelectorAll(".product-card.product-card-refined").forEach((card) => {
+      if (card.dataset.mobileRevealBound === "true") return;
+      card.dataset.mobileRevealBound = "true";
+
+      card.addEventListener("click", (event) => {
+        const interactiveTarget = event.target.closest("button, a, input, select, textarea, label");
+        const hoverActions = event.target.closest(".product-hover-actions");
+
+        if (interactiveTarget && hoverActions) return;
+        if (interactiveTarget && !event.target.closest(".product-card-refined")) return;
+
+        if (!card.classList.contains("is-mobile-actions-visible")) {
+          document.querySelectorAll(".product-card.product-card-refined.is-mobile-actions-visible").forEach((openCard) => {
+            if (openCard !== card) openCard.classList.remove("is-mobile-actions-visible");
+          });
+          card.classList.add("is-mobile-actions-visible");
+
+          if (!interactiveTarget) {
+            event.preventDefault();
+            event.stopPropagation();
+          }
+        }
+      });
+    });
+  }
+
   scope.querySelectorAll("[data-open-product]").forEach((btn) => {
     btn.addEventListener("click", async (event) => {
       if (typeof window.navigateTo === "function") {
@@ -1708,9 +1832,7 @@ function bindProductActions(scope = document) {
 
   scope.querySelectorAll("[data-add-cart]").forEach((btn) => {
     btn.addEventListener("click", async () => {
-      const quantity = askQuantity(1);
-      if (quantity == null) return;
-      await addProductToCart(Number(btn.dataset.addCart), quantity);
+      await addProductToCart(Number(btn.dataset.addCart), 1);
     });
   });
 
@@ -4174,6 +4296,95 @@ function bindStaticEvents() {
     if (filterKeyword) filterKeyword.value = state.search;
     await loadProducts();
     showView("home");
+    closeSearchArea();
+  });
+
+  navSearchToggleBtn?.addEventListener("click", openSearchArea);
+  mobileHeaderMenuToggle?.addEventListener("click", (event) => {
+    event.stopPropagation();
+    setMobileHeaderMenuOpen(!state.mobileHeaderMenuOpen);
+  });
+  closeSearchAreaBtn?.addEventListener("click", closeSearchArea);
+  searchArea?.addEventListener("click", (event) => {
+    if (event.target === searchArea || event.target.closest(".search-area-backdrop")) {
+      closeSearchArea();
+    }
+  });
+  document.addEventListener("keydown", (event) => {
+    if (event.key === "Escape") closeSearchArea();
+  });
+
+  document.querySelectorAll("[data-home-scroll]").forEach((trigger) => {
+    trigger.addEventListener("click", async (event) => {
+      event.preventDefault();
+      await goToHomeSection(trigger.dataset.homeScroll);
+    });
+  });
+
+  mobileHeaderDropdown?.addEventListener("click", async (event) => {
+    const trigger = event.target.closest("[data-mobile-nav-action]");
+    if (!trigger) return;
+    const action = String(trigger.dataset.mobileNavAction || "");
+    setMobileHeaderMenuOpen(false);
+
+    if (action === "home") {
+      showView("home");
+      return;
+    }
+    if (action === "filtersSection" || action === "benefitsSection") {
+      await goToHomeSection(action);
+      return;
+    }
+    if (action === "login") {
+      showView("auth");
+      return;
+    }
+    if (action === "profile") {
+      fillProfileFormFromUser();
+      showView("profile");
+      return;
+    }
+    if (action === "messages") {
+      await loadMessages();
+      showView("messages");
+      return;
+    }
+    if (action === "notifications") {
+      await loadNotifications();
+      showView("notifications");
+      return;
+    }
+    if (action === "favorites") {
+      await loadFavorites();
+      showView("favorites");
+      return;
+    }
+    if (action === "cart") {
+      await loadCart();
+      showView("cart");
+      return;
+    }
+    if (action === "orders") {
+      await loadOrders();
+      showView("orders");
+      return;
+    }
+    if (action === "dashboard") {
+      await loadDashboard();
+      showView("dashboard");
+      return;
+    }
+    if (action === "add-product") {
+      openModal(productFormModal);
+      return;
+    }
+    if (action === "admin") {
+      if (state.user?.role === "admin") window.location.href = "/admin";
+      return;
+    }
+    if (action === "logout") {
+      navLogoutBtn?.click();
+    }
   });
 
   document.getElementById("applyFiltersBtn")?.addEventListener("click", handleSearchAndFilters);
@@ -4303,6 +4514,20 @@ function bindStaticEvents() {
     openModal(productFormModal);
   });
 
+  heroSellerCtaBtn?.addEventListener("click", async () => {
+    if (state.user?.role === "seller") {
+      openModal(productFormModal);
+      return;
+    }
+
+    if (typeof window.navigateTo === "function") {
+      await window.navigateTo("/auth");
+      return;
+    }
+
+    showView("auth");
+  });
+
   document.getElementById("openAddProductFromDashboard")?.addEventListener("click", () => {
     openModal(productFormModal);
   });
@@ -4375,6 +4600,21 @@ function bindStaticEvents() {
     if (!mobileConversationPicker.contains(event.target)) {
       setMobileConversationPickerOpen(false);
     }
+  });
+
+  document.addEventListener("click", (event) => {
+    if (!state.mobileHeaderMenuOpen || !mobileHeaderMenu) return;
+    if (!mobileHeaderMenu.contains(event.target)) {
+      setMobileHeaderMenuOpen(false);
+    }
+  });
+
+  document.addEventListener("click", (event) => {
+    if (!window.matchMedia("(hover: none), (pointer: coarse)").matches) return;
+    if (event.target.closest(".product-card.product-card-refined")) return;
+    document.querySelectorAll(".product-card.product-card-refined.is-mobile-actions-visible").forEach((card) => {
+      card.classList.remove("is-mobile-actions-visible");
+    });
   });
 
   document.getElementById("refreshAdminUsers")?.addEventListener("click", async () => {
@@ -4621,145 +4861,6 @@ const bootstrapPromise = bootstrap().catch((error) => {
   console.error(error);
   showToast("حدث خطأ أثناء تحميل الصفحة");
 });
-function productCardHtml(product) {
-  const sellerName = escapeHtml(product.seller.storeName || product.seller.fullName || "");
-  const favoriteActive = isFavoriteProduct(product.id);
-  const detailPath = `/product/${product.id}`;
-  const detailAction = `<a class="product-detail-link" href="${detailPath}" data-route="${detailPath}" aria-label="عرض التفاصيل" title="عرض التفاصيل">👁</a>`;
-  const productImage = product.image
-    ? `<div class="product-image product-image-wrap"><button class="favorite-fab ${favoriteActive ? "is-active-favorite" : ""}" data-toggle-favorite="${product.id}" type="button" aria-label="${favoriteActive ? "إزالة من المفضلة" : "إضافة إلى المفضلة"}">${favoriteActive ? "♥" : "♡"}</button>${detailAction}<img src="${escapeHtml(product.image)}" alt="${escapeHtml(product.name)}" loading="lazy" /></div>`
-    : `<div class="product-image product-image-placeholder product-image-wrap"><button class="favorite-fab ${favoriteActive ? "is-active-favorite" : ""}" data-toggle-favorite="${product.id}" type="button" aria-label="${favoriteActive ? "إزالة من المفضلة" : "إضافة إلى المفضلة"}">${favoriteActive ? "♥" : "♡"}</button>${detailAction}</div>`;
-
-  let conditionClass = "";
-  if (product.condition === "جديد") conditionClass = "condition-new";
-  else if (product.condition === "مستعمل كالجديد") conditionClass = "condition-like-new";
-  else if (product.condition === "مستعمل بحالة جيدة") conditionClass = "condition-used-good";
-
-  const canMessage = state.user && state.user.role !== "seller";
-
-  return `
-    <article class="product-card auction-card product-card-refined">
-      ${product.condition ? `<div class="condition-ribbon ${conditionClass}">${escapeHtml(product.condition)}</div>` : ""}
-      ${productImage}
-      <div class="product-body product-body-pro">
-        <div class="product-title" title="${escapeHtml(product.name)}">${escapeHtml(product.name)}</div>
-        <div class="product-price product-price-centered product-price-hero">${formatPrice(product.price, product.currency)}</div>
-        <div class="product-meta-grid pro-meta-grid">
-          <span class="product-region-badge region-pill">
-            <span class="region-icon" aria-hidden="true">📍</span>
-            ${escapeHtml(product.region)}
-          </span>
-          <span class="views-badge compact-pill">
-            <span class="views-icon" aria-hidden="true">👁</span>
-            <span>${product.viewsCount}</span>
-          </span>
-        </div>
-        <div class="product-store-block product-store-block-pro">
-          <a class="store-link store-link-pro" href="/seller/${product.seller.id}" data-route="/seller/${product.seller.id}" data-open-seller="${product.seller.id}">${sellerName}</a>
-          <div class="store-rating store-rating-pro">
-            <span class="star-icon" aria-hidden="true">★</span>
-            ${product.seller.averageRating.toFixed(1)}
-            <span class="rating-count">(${product.seller.ratingsCount})</span>
-          </div>
-        </div>
-        ${deliveryIndicatorHtml(product, "product-delivery-pill")}
-        <div class="product-quick-actions">
-          <button class="icon-action-button" data-add-cart="${product.id}" type="button" aria-label="أضف إلى السلة" title="أضف إلى السلة">
-            <span aria-hidden="true">🛒</span>
-          </button>
-          <button class="icon-action-button" data-report-product="${product.id}" type="button" aria-label="إرسال بلاغ" title="إرسال بلاغ">
-            <span aria-hidden="true">⚑</span>
-          </button>
-        </div>
-      </div>
-    </article>
-  `;
-}
-
-// Final override for the storefront card: one clear CTA only.
-function productCardHtml(product) {
-  const sellerName = escapeHtml(product.seller.storeName || product.seller.fullName || "");
-  const favoriteActive = isFavoriteProduct(product.id);
-  const detailPath = `/product/${product.id}`;
-  const deliveryAvailable = Boolean(product.hasDeliveryService);
-  const productImage = product.image
-    ? `<div class="product-image product-image-wrap"><button class="favorite-fab ${favoriteActive ? "is-active-favorite" : ""}" data-toggle-favorite="${product.id}" type="button" aria-label="${favoriteActive ? "إزالة من المفضلة" : "إضافة إلى المفضلة"}">${favoriteActive ? "♥" : "♡"}</button><img src="${escapeHtml(product.image)}" alt="${escapeHtml(product.name)}" loading="lazy" /></div>`
-    : `<div class="product-image product-image-placeholder product-image-wrap"><button class="favorite-fab ${favoriteActive ? "is-active-favorite" : ""}" data-toggle-favorite="${product.id}" type="button" aria-label="${favoriteActive ? "إزالة من المفضلة" : "إضافة إلى المفضلة"}">${favoriteActive ? "♥" : "♡"}</button></div>`;
-
-  let conditionClass = "";
-  if (product.condition === "جديد") conditionClass = "condition-new";
-  else if (product.condition === "مستعمل كالجديد") conditionClass = "condition-like-new";
-  else if (product.condition === "مستعمل بحالة جيدة") conditionClass = "condition-used-good";
-
-  return `
-    <article class="product-card auction-card product-card-refined">
-      ${product.condition ? `<div class="condition-ribbon ${conditionClass}">${escapeHtml(product.condition)}</div>` : ""}
-      ${productImage}
-      <div class="product-body product-body-pro">
-        <div class="product-title product-title-compact" title="${escapeHtml(product.name)}">${escapeHtml(product.name)}</div>
-        <div class="product-info-stack">
-          <div class="product-info-row">
-            <div class="product-price product-price-inline">${formatPrice(product.price, product.currency)}</div>
-            <button class="product-delivery-icon ${deliveryAvailable ? "is-available" : "is-unavailable"}" data-delivery-info="${deliveryAvailable ? "available" : "unavailable"}" type="button" aria-label="${deliveryAvailable ? "التوصيل متاح" : "التوصيل غير متاح"}" title="${deliveryAvailable ? "التوصيل متاح" : "التوصيل غير متاح"}">🚚</button>
-          </div>
-          <div class="product-info-row product-info-row-muted">
-            <div class="product-location-text">📍 ${escapeHtml(product.region)}</div>
-            <div class="product-views-text">👁 ${product.viewsCount}</div>
-          </div>
-          <div class="product-info-row">
-            <a class="store-link store-link-pro product-store-inline" href="/seller/${product.seller.id}" data-route="/seller/${product.seller.id}" data-open-seller="${product.seller.id}" title="${sellerName}">${sellerName}</a>
-            <div class="product-rating-inline"><span class="product-rating-star">★</span> ${product.seller.averageRating.toFixed(1)} <span class="rating-count">(${product.seller.ratingsCount})</span></div>
-          </div>
-        </div>
-        <div class="product-card-bottom-actions product-card-bottom-actions-wide">
-          <a class="product-inline-action product-inline-action-wide" href="${detailPath}" data-route="${detailPath}">التفاصيل</a>
-        </div>
-      </div>
-    </article>
-  `;
-}
-
-function productCardHtml(product) {
-  const sellerName = escapeHtml(product.seller.storeName || product.seller.fullName || "");
-  const favoriteActive = isFavoriteProduct(product.id);
-  const detailPath = `/product/${product.id}`;
-  const deliveryAvailable = Boolean(product.hasDeliveryService);
-  const productImage = product.image
-    ? `<div class="product-image product-image-wrap"><button class="favorite-fab ${favoriteActive ? "is-active-favorite" : ""}" data-toggle-favorite="${product.id}" type="button" aria-label="${favoriteActive ? "إزالة من المفضلة" : "إضافة إلى المفضلة"}">${favoriteActive ? "♥" : "♡"}</button><img src="${escapeHtml(product.image)}" alt="${escapeHtml(product.name)}" loading="lazy" /></div>`
-    : `<div class="product-image product-image-placeholder product-image-wrap"><button class="favorite-fab ${favoriteActive ? "is-active-favorite" : ""}" data-toggle-favorite="${product.id}" type="button" aria-label="${favoriteActive ? "إزالة من المفضلة" : "إضافة إلى المفضلة"}">${favoriteActive ? "♥" : "♡"}</button></div>`;
-
-  let conditionClass = "";
-  if (product.condition === "جديد") conditionClass = "condition-new";
-  else if (product.condition === "مستعمل كالجديد") conditionClass = "condition-like-new";
-  else if (product.condition === "مستعمل بحالة جيدة") conditionClass = "condition-used-good";
-
-  return `
-    <article class="product-card auction-card product-card-refined">
-      ${product.condition ? `<div class="condition-ribbon ${conditionClass}">${escapeHtml(product.condition)}</div>` : ""}
-      ${productImage}
-      <div class="product-body product-body-pro">
-        <div class="product-title product-title-compact" title="${escapeHtml(product.name)}">${escapeHtml(product.name)}</div>
-        <div class="product-info-stack">
-          <div class="product-info-row">
-            <div class="product-price product-price-inline">${formatPrice(product.price, product.currency)}</div>
-            <button class="product-delivery-icon ${deliveryAvailable ? "is-available" : "is-unavailable"}" data-delivery-info="${deliveryAvailable ? "available" : "unavailable"}" type="button" aria-label="${deliveryAvailable ? "التوصيل متاح" : "التوصيل غير متاح"}" title="${deliveryAvailable ? "التوصيل متاح" : "التوصيل غير متاح"}">🚚</button>
-          </div>
-          <div class="product-info-row product-info-row-muted">
-            <div class="product-location-text">📍 ${escapeHtml(product.region)}</div>
-            <div class="product-views-text">👁 ${product.viewsCount}</div>
-          </div>
-          <div class="product-info-row">
-            <a class="store-link store-link-pro product-store-inline" href="/seller/${product.seller.id}" data-route="/seller/${product.seller.id}" data-open-seller="${product.seller.id}" title="${sellerName}">${sellerName}</a>
-            <div class="product-rating-inline"><span class="product-rating-star">★</span> ${product.seller.averageRating.toFixed(1)} <span class="rating-count">(${product.seller.ratingsCount})</span></div>
-          </div>
-        </div>
-        <div class="product-card-bottom-actions product-card-bottom-actions-wide">
-          <a class="product-inline-action product-inline-action-wide" href="${detailPath}" data-route="${detailPath}">التفاصيل</a>
-        </div>
-      </div>
-    </article>
-  `;
-}
 
 function renderCart() {
   if (!cartItemsList || !cartSummaryPanel) return;
@@ -4850,48 +4951,6 @@ function renderCart() {
   });
 }
 
-function productCardHtml(product) {
-  const sellerName = escapeHtml(product.seller.storeName || product.seller.fullName || "");
-  const favoriteActive = isFavoriteProduct(product.id);
-  const detailPath = `/product/${product.id}`;
-  const deliveryAvailable = Boolean(product.hasDeliveryService);
-  const productImage = product.image
-    ? `<div class="product-image product-image-wrap"><button class="favorite-fab ${favoriteActive ? "is-active-favorite" : ""}" data-toggle-favorite="${product.id}" type="button" aria-label="${favoriteActive ? "إزالة من المفضلة" : "إضافة إلى المفضلة"}">${favoriteActive ? "♥" : "♡"}</button><img src="${escapeHtml(product.image)}" alt="${escapeHtml(product.name)}" loading="lazy" /></div>`
-    : `<div class="product-image product-image-placeholder product-image-wrap"><button class="favorite-fab ${favoriteActive ? "is-active-favorite" : ""}" data-toggle-favorite="${product.id}" type="button" aria-label="${favoriteActive ? "إزالة من المفضلة" : "إضافة إلى المفضلة"}">${favoriteActive ? "♥" : "♡"}</button></div>`;
-
-  let conditionClass = "";
-  if (product.condition === "جديد") conditionClass = "condition-new";
-  else if (product.condition === "مستعمل كالجديد") conditionClass = "condition-like-new";
-  else if (product.condition === "مستعمل بحالة جيدة") conditionClass = "condition-used-good";
-
-  return `
-    <article class="product-card auction-card product-card-refined">
-      ${product.condition ? `<div class="condition-ribbon ${conditionClass}">${escapeHtml(product.condition)}</div>` : ""}
-      ${productImage}
-      <div class="product-body product-body-pro">
-        <div class="product-title product-title-compact" title="${escapeHtml(product.name)}">${escapeHtml(product.name)}</div>
-        <div class="product-info-stack">
-          <div class="product-info-row">
-            <div class="product-price product-price-inline">${formatPrice(product.price, product.currency)}</div>
-            <button class="product-delivery-icon ${deliveryAvailable ? "is-available" : "is-unavailable"}" data-delivery-info="${deliveryAvailable ? "available" : "unavailable"}" type="button" aria-label="${deliveryAvailable ? "التوصيل متاح" : "التوصيل غير متاح"}" title="${deliveryAvailable ? "التوصيل متاح" : "التوصيل غير متاح"}">🚚</button>
-          </div>
-          <div class="product-info-row product-info-row-muted">
-            <div class="product-location-text">📍 ${escapeHtml(product.region)}</div>
-            <div class="product-views-text">👁 ${product.viewsCount}</div>
-          </div>
-          <div class="product-info-row">
-            <a class="store-link store-link-pro product-store-inline" href="/seller/${product.seller.id}" data-route="/seller/${product.seller.id}" data-open-seller="${product.seller.id}" title="${sellerName}">${sellerName}</a>
-            <div class="product-rating-inline"><span class="product-rating-star">★</span> ${product.seller.averageRating.toFixed(1)} <span class="rating-count">(${product.seller.ratingsCount})</span></div>
-          </div>
-        </div>
-        <div class="product-card-bottom-actions product-card-bottom-actions-wide">
-          <a class="product-inline-action product-inline-action-wide" href="${detailPath}" data-route="${detailPath}">التفاصيل</a>
-        </div>
-      </div>
-    </article>
-  `;
-}
-
 window.marketplaceApp = {
   state,
   showView,
@@ -4928,170 +4987,29 @@ bootstrapPromise.finally(() => {
 
 function ensureSecurityUi() {
   state.securityChallenges = state.securityChallenges || {};
-
-  const injectChallenge = (formId, afterInputId, promptId, answerId) => {
-    const form = document.getElementById(formId);
-    const afterInput = document.getElementById(afterInputId);
-    if (!form || !afterInput || document.getElementById(promptId)) return;
-    const wrapper = document.createElement("div");
-    wrapper.className = "security-challenge-box";
-    wrapper.innerHTML = `
-      <div id="${promptId}" class="security-challenge-prompt">جارٍ تحميل سؤال التحقق...</div>
-      <input class="field" id="${answerId}" placeholder="اكتب ناتج السؤال" required />
-    `;
-    afterInput.insertAdjacentElement("afterend", wrapper);
-  };
-
-  injectChallenge("loginForm", "loginPassword", "loginChallengePrompt", "loginChallengeAnswer");
-  injectChallenge("registerForm", "registerPassword", "registerChallengePrompt", "registerChallengeAnswer");
-
-  if (!document.getElementById("verificationModal")) {
-    const modal = document.createElement("div");
-    modal.className = "modal";
-    modal.id = "verificationModal";
-    modal.innerHTML = `
-      <div class="modal-content small-modal">
-        <div class="modal-header">
-          <h2>تحقق الحساب</h2>
-          <button class="icon-btn" id="closeVerificationModal" type="button">×</button>
-        </div>
-        <div class="verification-modal-body">
-          <div id="verificationStatusBox" class="verification-status-box">جارٍ تحميل حالة التحقق...</div>
-          <select id="verificationChannel" class="field">
-            <option value="phone">رسالة هاتف</option>
-            <option value="email">بريد إلكتروني</option>
-            <option value="whatsapp">واتساب</option>
-          </select>
-          <div class="verification-action-row">
-            <button id="requestVerificationCodeBtn" class="btn btn-light" type="button">إرسال رمز التحقق</button>
-          </div>
-          <input id="verificationCodeInput" class="field" placeholder="أدخل رمز التحقق" />
-          <div class="verification-action-row">
-            <button id="submitVerificationCodeBtn" class="btn btn-primary" type="button">تأكيد الرمز</button>
-          </div>
-          <div id="verificationHintBox" class="mini-note hidden"></div>
-        </div>
-      </div>
-    `;
-    document.body.appendChild(modal);
-  }
 }
 
-async function refreshSecurityChallenge(scope) {
-  try {
-    const data = await api(`/api/security/challenge?scope=${encodeURIComponent(scope)}`);
-    state.securityChallenges = state.securityChallenges || {};
-    state.securityChallenges[scope] = data;
-    const promptEl = document.getElementById(`${scope}ChallengePrompt`);
-    if (promptEl) {
-      promptEl.textContent = data.prompt || "أجب عن السؤال للمتابعة";
-    }
-  } catch (_error) {
-    const promptEl = document.getElementById(`${scope}ChallengePrompt`);
-    if (promptEl) promptEl.textContent = "تعذر تحميل سؤال التحقق. حدّث الصفحة.";
-  }
-}
+async function refreshSecurityChallenge(_scope) {}
 
-function openVerificationModal() {
-  openModal(document.getElementById("verificationModal"));
-}
+function openVerificationModal() {}
 
-function closeVerificationModalUi() {
-  closeModal(document.getElementById("verificationModal"));
-}
+function closeVerificationModalUi() {}
 
-function renderVerificationStatus(verification) {
-  const statusBox = document.getElementById("verificationStatusBox");
-  const channelSelect = document.getElementById("verificationChannel");
-  if (!statusBox || !verification) return;
-
-  statusBox.innerHTML = `
-    <div><strong>حالة الحساب:</strong> ${escapeHtml(verification.verificationStatus || "unverified")}</div>
-    <div>البريد: ${verification.isEmailVerified ? "تم التحقق" : "غير متحقق"}</div>
-    <div>الهاتف: ${verification.isPhoneVerified ? "تم التحقق" : "غير متحقق"}</div>
-  `;
-
-  if (channelSelect) {
-    if (!verification.email) {
-      const emailOption = channelSelect.querySelector('option[value="email"]');
-      if (emailOption) emailOption.disabled = true;
-    }
-    channelSelect.value = verification.phone ? "phone" : (verification.email ? "email" : "whatsapp");
-  }
-}
+function renderVerificationStatus(_verification) {}
 
 async function loadVerificationStatus() {
+  state.verification = null;
   if (!state.user) return;
   try {
     const data = await api("/api/auth/verification-status");
     state.verification = data.verification || null;
-    if (state.verification && state.verification.verificationEnabled === false) {
-      closeVerificationModalUi();
-      return;
-    }
-    renderVerificationStatus(state.verification);
-
-    const shouldPrompt = state.verification &&
-      !state.verification.isPhoneVerified &&
-      !state.verification.isEmailVerified;
-    if (shouldPrompt) openVerificationModal();
   } catch (_error) {
   }
 }
 
-async function requestVerificationCode() {
-  const channel = document.getElementById("verificationChannel")?.value || "phone";
-  const hintBox = document.getElementById("verificationHintBox");
-  if (state.verification && state.verification.verificationEnabled === false) {
-    showToast("ميزة التحقق بالرمز موقوفة مؤقتا");
-    return;
-  }
-  try {
-    const data = await api("/api/auth/verification/request", {
-      method: "POST",
-      body: JSON.stringify({ channel })
-    });
-    if (hintBox) {
-      hintBox.classList.remove("hidden");
-      hintBox.innerHTML = `
-        <div>تم إرسال الرمز إلى: ${escapeHtml(data.delivery?.destination || "-")}</div>
-        ${data.delivery?.previewCode ? `<div><strong>رمز التطوير:</strong> ${escapeHtml(data.delivery.previewCode)}</div>` : ""}
-      `;
-    }
-    showToast("تم إنشاء رمز التحقق بنجاح");
-  } catch (error) {
-    showToast(error.message);
-  }
-}
+async function requestVerificationCode() {}
 
-async function submitVerificationCode() {
-  const channel = document.getElementById("verificationChannel")?.value || "phone";
-  const code = document.getElementById("verificationCodeInput")?.value?.trim() || "";
-  if (state.verification && state.verification.verificationEnabled === false) {
-    showToast("ميزة التحقق بالرمز موقوفة مؤقتا");
-    closeVerificationModalUi();
-    return;
-  }
-  if (!code) {
-    showToast("أدخل رمز التحقق أولاً");
-    return;
-  }
-  try {
-    const data = await api("/api/auth/verification/confirm", {
-      method: "POST",
-      body: JSON.stringify({ channel, code })
-    });
-    setAuth({ token: state.token, user: data.user });
-    state.verification = data.verification || null;
-    renderVerificationStatus(state.verification);
-    showToast("تم تأكيد التحقق بنجاح");
-    if (state.verification?.isPhoneVerified || state.verification?.isEmailVerified) {
-      closeVerificationModalUi();
-    }
-  } catch (error) {
-    showToast(error.message);
-  }
-}
+async function submitVerificationCode() {}
 
 async function handleSecureLoginSubmit(event) {
   event.preventDefault();
@@ -5101,10 +5019,8 @@ async function handleSecureLoginSubmit(event) {
 
   const identifier = document.getElementById("loginIdentifier")?.value?.trim() || "";
   const password = document.getElementById("loginPassword")?.value || "";
-  const challengeAnswer = document.getElementById("loginChallengeAnswer")?.value?.trim() || "";
-
-  if (!identifier || !password || !challengeAnswer) {
-    showToast("يرجى إكمال بيانات الدخول وسؤال التحقق");
+  if (!identifier || !password) {
+    showToast("يرجى إكمال بيانات الدخول");
     return;
   }
 
@@ -5116,9 +5032,7 @@ async function handleSecureLoginSubmit(event) {
       method: "POST",
       body: JSON.stringify({
         identifier,
-        password,
-        challengeId: state.securityChallenges?.login?.challengeId,
-        challengeAnswer
+        password
       })
     });
 
@@ -5126,12 +5040,9 @@ async function handleSecureLoginSubmit(event) {
     await afterAuthLoad();
     await loadNotifications();
     await loadVerificationStatus();
-    document.getElementById("loginChallengeAnswer") && (document.getElementById("loginChallengeAnswer").value = "");
-    await refreshSecurityChallenge("login");
     showView(state.user?.role === "seller" ? "dashboard" : "home");
     showToast("تم تسجيل الدخول بنجاح");
   } catch (error) {
-    await refreshSecurityChallenge("login");
     showToast(error.message || "فشل تسجيل الدخول");
   } finally {
     restoreUi();
@@ -5153,13 +5064,11 @@ async function handleSecureRegisterSubmit(event) {
     email: document.getElementById("registerEmail")?.value?.trim() || "",
     region: document.getElementById("registerRegion")?.value?.trim() || "",
     password: document.getElementById("registerPassword")?.value || "",
-    profileDescription: document.getElementById("registerDescription")?.value?.trim() || "",
-    challengeId: state.securityChallenges?.register?.challengeId,
-    challengeAnswer: document.getElementById("registerChallengeAnswer")?.value?.trim() || ""
+    profileDescription: document.getElementById("registerDescription")?.value?.trim() || ""
   };
 
-  if (!payload.fullName || !payload.phone || !payload.password || !payload.region || !payload.challengeAnswer) {
-    showToast("يرجى تعبئة الحقول المطلوبة وسؤال التحقق");
+  if (!payload.fullName || !payload.phone || !payload.password || !payload.region) {
+    showToast("يرجى تعبئة الحقول المطلوبة");
     return;
   }
 
@@ -5176,12 +5085,9 @@ async function handleSecureRegisterSubmit(event) {
     await afterAuthLoad();
     await loadNotifications();
     await loadVerificationStatus();
-    document.getElementById("registerChallengeAnswer") && (document.getElementById("registerChallengeAnswer").value = "");
-    await refreshSecurityChallenge("register");
-    showToast("تم إنشاء الحساب بنجاح. أكمل التحقق من الحساب.");
+    showToast("تم إنشاء الحساب بنجاح");
     showView("home");
   } catch (error) {
-    await refreshSecurityChallenge("register");
     showToast(error.message || "تعذر إنشاء الحساب");
   } finally {
     restoreUi();
@@ -5198,13 +5104,6 @@ function bindSecurityOverrides() {
       handleSecureRegisterSubmit(event);
     }
   }, true);
-
-  document.getElementById("closeVerificationModal")?.addEventListener("click", closeVerificationModalUi);
-  document.getElementById("verificationModal")?.addEventListener("click", (event) => {
-    if (event.target?.id === "verificationModal") closeVerificationModalUi();
-  });
-  document.getElementById("requestVerificationCodeBtn")?.addEventListener("click", requestVerificationCode);
-  document.getElementById("submitVerificationCodeBtn")?.addEventListener("click", submitVerificationCode);
 }
 
 function renderConversationDetails(conversation) {

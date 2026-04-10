@@ -435,6 +435,268 @@ async function ensureDefaultAdminAccess() {
   );
 }
 
+// Final override: keep Arabic demo products seedable even when the database already has users.
+async function seedDatabase() {
+  const passwordHash = bcrypt.hashSync('12345678', 10);
+  await ensureDefaultAdminAccess();
+
+  const ensureUser = async ({
+    email,
+    role,
+    fullName,
+    storeName = null,
+    phone,
+    region,
+    profileDescription,
+    whatsapp
+  }) => {
+    const existing = await query(
+      `SELECT *
+       FROM users
+       WHERE email = $1
+       LIMIT 1`,
+      [email]
+    );
+
+    if (existing.rows[0]) {
+      const updated = await query(
+        `UPDATE users
+         SET
+           full_name = COALESCE(NULLIF(full_name, ''), $2),
+           store_name = CASE
+             WHEN $3::text IS NULL THEN store_name
+             ELSE COALESCE(NULLIF(store_name, ''), $3)
+           END,
+           phone = COALESCE(NULLIF(phone, ''), $4),
+           password_hash = COALESCE(password_hash, $5),
+           role = COALESCE(role, $6),
+           region = COALESCE(NULLIF(region, ''), $7),
+           profile_description = COALESCE(NULLIF(profile_description, ''), $8),
+           whatsapp = COALESCE(NULLIF(whatsapp, ''), $9),
+           is_active = TRUE,
+           updated_at = NOW()
+         WHERE id = $1
+         RETURNING *`,
+        [
+          existing.rows[0].id,
+          fullName,
+          storeName,
+          phone,
+          passwordHash,
+          role,
+          region,
+          profileDescription,
+          whatsapp
+        ]
+      );
+
+      return updated.rows[0];
+    }
+
+    const inserted = await query(
+      `INSERT INTO users (
+        full_name, store_name, phone, email, password_hash, role, region, profile_description, whatsapp, is_active
+      )
+      VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,TRUE)
+      RETURNING *`,
+      [fullName, storeName, phone, email, passwordHash, role, region, profileDescription, whatsapp]
+    );
+
+    return inserted.rows[0];
+  };
+
+  const ensureSellerProfile = async (seller) => {
+    await query(
+      `INSERT INTO seller_profiles (user_id, display_name, bio)
+       VALUES ($1, $2, $3)
+       ON CONFLICT (user_id)
+       DO UPDATE SET
+         display_name = EXCLUDED.display_name,
+         bio = EXCLUDED.bio,
+         updated_at = NOW()`,
+      [seller.id, seller.store_name || seller.full_name, seller.profile_description]
+    );
+  };
+
+  const ensureProduct = async ({
+    sellerId,
+    name,
+    description,
+    price,
+    currency,
+    category,
+    tags,
+    region,
+    itemCondition,
+    quantity,
+    viewsCount,
+    images
+  }) => {
+    const existing = await query(
+      `SELECT id
+       FROM products
+       WHERE seller_id = $1 AND name = $2
+       LIMIT 1`,
+      [sellerId, name]
+    );
+
+    let productId = existing.rows[0]?.id;
+    if (productId) {
+      await query(
+        `UPDATE products
+         SET
+           description = $2,
+           price = $3,
+           currency = $4,
+           category = $5,
+           tags_json = $6::jsonb,
+           region = $7,
+           item_condition = $8,
+           quantity = $9,
+           status = 'published',
+           views_count = $10,
+           updated_at = NOW()
+         WHERE id = $1`,
+        [productId, description, price, currency, category, JSON.stringify(tags), region, itemCondition, quantity, viewsCount]
+      );
+    } else {
+      const inserted = await query(
+        `INSERT INTO products (
+          seller_id, name, description, price, currency, category, tags_json, region, item_condition, quantity, status, views_count
+        ) VALUES ($1,$2,$3,$4,$5,$6,$7::jsonb,$8,$9,$10,'published',$11)
+        RETURNING id`,
+        [sellerId, name, description, price, currency, category, JSON.stringify(tags), region, itemCondition, quantity, viewsCount]
+      );
+      productId = inserted.rows[0].id;
+    }
+
+    const imagesCount = await query(
+      `SELECT COUNT(*)::int AS count
+       FROM product_images
+       WHERE product_id = $1`,
+      [productId]
+    );
+
+    if ((imagesCount.rows[0]?.count || 0) === 0) {
+      for (let index = 0; index < images.length; index += 1) {
+        await query(
+          `INSERT INTO product_images (product_id, image_url, sort_order)
+           VALUES ($1,$2,$3)`,
+          [productId, images[index], index]
+        );
+      }
+    }
+
+    return productId;
+  };
+
+  const seller = await ensureUser({
+    email: 'rana@example.com',
+    role: 'seller',
+    fullName: 'رنا أحمد',
+    storeName: 'بيت الحلويات الشامية',
+    phone: '0999123456',
+    region: 'دمشق',
+    profileDescription: 'حلويات منزلية وتجهيز حسب الطلب.',
+    whatsapp: '0999123456'
+  });
+  await ensureSellerProfile(seller);
+
+  const buyer = await ensureUser({
+    email: 'buyer@example.com',
+    role: 'buyer',
+    fullName: 'مشتري تجريبي',
+    phone: '0999000001',
+    region: 'دمشق',
+    profileDescription: 'حساب مشتري تجريبي',
+    whatsapp: '0999000001'
+  });
+
+  const p1Id = await ensureProduct({
+    sellerId: seller.id,
+    name: 'معمول فاخر بالفستق',
+    description: 'معمول منزلي محشو بالفستق الحلبي، تجهيز يومي، مناسب للهدايا والضيافة.',
+    price: 18000,
+    currency: 'ل.س',
+    category: 'حلويات',
+    tags: ['منزلي', 'ضيافة', 'هدايا'],
+    region: 'دمشق',
+    itemCondition: 'جديد',
+    quantity: 10,
+    viewsCount: 540,
+    images: [
+      'https://images.unsplash.com/photo-1519864600265-abb23847ef2c?auto=format&fit=crop&w=1200&q=80',
+      'https://images.unsplash.com/photo-1541976076758-347942db1978?auto=format&fit=crop&w=1200&q=80'
+    ]
+  });
+
+  await ensureProduct({
+    sellerId: seller.id,
+    name: 'مربى تين منزلي',
+    description: 'مربى تين منزلي بمكونات طبيعية وتحضير نظيف.',
+    price: 22000,
+    currency: 'ل.س',
+    category: 'مأكولات',
+    tags: ['بيتي', 'طبيعي', 'فطور'],
+    region: 'اللاذقية',
+    itemCondition: 'جديد',
+    quantity: 6,
+    viewsCount: 210,
+    images: [
+      'https://images.unsplash.com/photo-1514996937319-344454492b37?auto=format&fit=crop&w=1200&q=80'
+    ]
+  });
+
+  const existingConversation = await query(
+    `SELECT id
+     FROM conversations
+     WHERE product_id = $1 AND seller_id = $2 AND buyer_id = $3
+     LIMIT 1`,
+    [p1Id, seller.id, buyer.id]
+  );
+
+  let conversationId = existingConversation.rows[0]?.id;
+  if (!conversationId) {
+    const conv = await query(
+      `INSERT INTO conversations (product_id, seller_id, buyer_id, conversation_type, status, last_message_at)
+       VALUES ($1,$2,$3,'inquiry','closed',NOW())
+       RETURNING id`,
+      [p1Id, seller.id, buyer.id]
+    );
+    conversationId = conv.rows[0].id;
+
+    await query(
+      `INSERT INTO messages (conversation_id, sender_id, message_body, is_read)
+       VALUES ($1,$2,$3,TRUE),($1,$4,$5,TRUE)`,
+      [
+        conversationId,
+        buyer.id,
+        'مرحباً، هل المنتج متوفر اليوم؟',
+        seller.id,
+        'نعم، متوفر ويمكن التواصل عبر واتساب.'
+      ]
+    );
+  }
+
+  const existingRating = await query(
+    `SELECT id
+     FROM ratings
+     WHERE conversation_id = $1
+     LIMIT 1`,
+    [conversationId]
+  );
+
+  if (!existingRating.rows[0]) {
+    await query(
+      `INSERT INTO ratings (conversation_id, product_id, seller_id, buyer_id, score, comment)
+       VALUES ($1,$2,$3,$4,$5,$6)`,
+      [conversationId, p1Id, seller.id, buyer.id, 5, 'تاجر متعاون وسريع بالرد']
+    );
+  }
+
+  await refreshSellerStats(seller.id);
+}
+
 async function getConversationById(conversationId, viewerId) {
   const convoResult = await query(
     `SELECT
@@ -872,5 +1134,6 @@ module.exports = {
   getOrdersSummaryForUser,
   getOrderById,
   refreshSellerStats,
+  seedDatabase,
   getConversationById
 };
