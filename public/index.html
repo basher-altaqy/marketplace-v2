@@ -24,12 +24,17 @@
         </nav>
 
         <div class="nav-actions header-nav-row">
+          <button class="btn btn-light header-search-trigger" id="navSearchToggleBtn" type="button" aria-label="فتح البحث" title="بحث">
+            <span aria-hidden="true">⌕</span>
+            <span>بحث</span>
+          </button>
           <div class="mobile-header-menu" id="mobileHeaderMenu">
-            <button class="btn btn-light mobile-header-menu-toggle" id="mobileHeaderMenuToggle" type="button" aria-expanded="false" aria-label="فتح القائمة" title="فتح القائمة">
-              <span aria-hidden="true">☰</span>
+            <button class="btn btn-light mobile-header-menu-toggle" id="mobileHeaderMenuToggle" type="button" aria-expanded="false" aria-label="فتح القائمة الرئيسية" title="القائمة الرئيسية">
+              <span aria-hidden="true">▦</span>
+              <span>القائمة</span>
             </button>
-          <div class="mobile-header-dropdown hidden" id="mobileHeaderDropdown"></div>
-        </div>
+            <div class="mobile-header-dropdown hidden" id="mobileHeaderDropdown"></div>
+          </div>
           <button class="btn btn-outline" id="navLoginBtn">تسجيل الدخول</button>
           <button class="btn btn-primary" id="navAddProductBtn">إضافة منتج</button>
           <button class="btn btn-light hidden" id="navProfileBtn">الملف الشخصي</button>
@@ -49,19 +54,32 @@
       <div class="search-area-backdrop"></div>
       <div class="search-area-panel">
         <button class="search-close-btn" id="closeSearchAreaBtn" type="button" aria-label="إغلاق البحث">×</button>
-        <div class="search-area-copy">
+        <div class="search-overlay-head">
           <div class="search-area-kicker">بحث سريع</div>
           <h3>ابحث عن المنتج الذي تحتاجه</h3>
           <p>اكتب اسم المنتج أو التصنيف أو نوع البضاعة وسننقلك مباشرة إلى نتائج الصفحة الرئيسية.</p>
         </div>
-        <form class="searchbar searchbar-glow searchbar-overlay" id="globalSearchForm">
-          <input
-            id="globalSearchInput"
-            type="search"
-            placeholder="ابحث عن حلويات، أعمال يدوية، منتجات منزلية، هدايا..."
-          />
-          <button class="btn btn-secondary" type="submit">بحث</button>
+        <form class="search-overlay-form" id="globalSearchForm">
+          <label class="search-overlay-field" for="globalSearchInput">
+            <span class="search-overlay-icon" aria-hidden="true">⌕</span>
+            <input
+              id="globalSearchInput"
+              class="search-overlay-input"
+              type="search"
+              placeholder="ابحث عن حلويات، أعمال يدوية، منتجات منزلية، هدايا..."
+            />
+          </label>
+          <button class="btn btn-secondary search-overlay-submit" type="submit">بحث</button>
         </form>
+        <div class="search-overlay-suggestions">
+          <div class="search-overlay-suggestions-label">اقتراحات سريعة</div>
+          <div class="search-quick-actions" aria-label="اقتراحات بحث سريعة">
+            <button class="search-quick-chip" type="button" data-search-shortcut="حلويات منزلية">حلويات منزلية</button>
+            <button class="search-quick-chip" type="button" data-search-shortcut="هدايا">هدايا</button>
+            <button class="search-quick-chip" type="button" data-search-shortcut="منتجات يدوية">منتجات يدوية</button>
+            <button class="search-quick-chip" type="button" data-search-shortcut="منتجات مطبخ">منتجات مطبخ</button>
+          </div>
+        </div>
       </div>
     </div>
 
@@ -398,6 +416,9 @@
           </div>
           <button class="btn btn-light" id="refreshOrdersBtn" type="button">تحديث</button>
         </div>
+        <div class="orders-page-toolbar">
+          <div class="orders-status-tabs" id="ordersTabs" aria-label="فلترة الطلبات حسب الحالة"></div>
+        </div>
         <div class="two-cols orders-layout">
           <div class="card">
             <div id="ordersList" class="list-stack"></div>
@@ -410,22 +431,79 @@
       </section>
 
       <section id="dashboardView" class="view hidden">
-        <div class="section-head">
-          <h2>لوحة البائع</h2>
+        <div class="section-head dashboard-screen-head">
+          <h2>لوحة التاجر</h2>
           <div id="dashboardUserInfo" class="muted"></div>
+        </div>
+
+        <div class="dashboard-hero-panel">
+          <div class="dashboard-hero-copy">
+            <div class="dashboard-hero-kicker">لوحة متجرك</div>
+            <h3 id="dashboardHeroTitle">مرحباً بعودتك</h3>
+            <p id="dashboardHeroSubtitle">هنا ملخص سريع لمتجرك، وآخر الطلبات، وأسرع الطرق لإدارة منتجاتك.</p>
+          </div>
+          <div class="dashboard-hero-actions" id="dashboardQuickActions">
+            <button class="dashboard-action-pill" type="button" data-dashboard-action="add-product">➕ إضافة منتج</button>
+            <button class="dashboard-action-pill" type="button" data-dashboard-action="orders">📦 كل الطلبات</button>
+            <button class="dashboard-action-pill" type="button" data-dashboard-action="products">🛍️ إدارة المنتجات</button>
+            <button class="dashboard-action-pill" type="button" data-dashboard-action="refresh">🔄 تحديث اللوحة</button>
+          </div>
         </div>
 
         <div class="stats-grid" id="statsGrid"></div>
 
-        <div class="card">
+        <div class="card dashboard-orders-card dashboard-surface-card">
           <div class="section-head">
-            <h3>منتجاتي</h3>
+            <div>
+              <h3>أحدث الطلبات</h3>
+              <p class="muted">آخر ما وصل إلى متجرك مع وصول سريع إلى المحادثة أو تفاصيل الطلب.</p>
+            </div>
+            <button class="btn btn-light" id="dashboardOpenOrdersBtn" type="button">عرض الكل</button>
+          </div>
+          <div id="dashboardRecentOrders" class="dashboard-orders-list"></div>
+        </div>
+
+        <div class="card dashboard-manage-card dashboard-surface-card">
+          <div class="section-head">
+            <div>
+              <h3>منتجاتي</h3>
+              <p class="muted small-label" id="dashboardProductsCounter">0 منتج</p>
+            </div>
             <button class="btn btn-primary" id="openAddProductFromDashboard" type="button">
               إضافة منتج
             </button>
           </div>
 
-          <div id="myProductsGrid" class="catalog-grid compact-grid"></div>
+          <div class="dashboard-products-toolbar">
+            <input class="field" id="dashboardProductSearch" type="search" placeholder="ابحث داخل منتجاتك..." />
+            <select class="field" id="dashboardProductStatusFilter">
+              <option value="all">كل الحالات</option>
+              <option value="published">المنشورة</option>
+              <option value="draft">المسودات</option>
+              <option value="hidden">المخفية</option>
+              <option value="sold">المباعة</option>
+              <option value="archived">المؤرشفة</option>
+            </select>
+            <select class="field" id="dashboardProductSort">
+              <option value="newest">الأحدث</option>
+              <option value="priceDesc">الأعلى سعراً</option>
+              <option value="priceAsc">الأقل سعراً</option>
+              <option value="views">الأكثر مشاهدة</option>
+              <option value="status">حسب الحالة</option>
+            </select>
+          </div>
+
+          <div id="myProductsGrid" class="catalog-grid compact-grid dashboard-managed-grid"></div>
+        </div>
+
+        <div class="card dashboard-products-card dashboard-surface-card">
+          <div class="section-head">
+            <div>
+              <h3>منتجات تستحق الانتباه</h3>
+              <p class="muted">عرض سريع للمنتجات الأكثر مشاهدة أو الأقرب للنفاد اعتماداً على البيانات المتاحة.</p>
+            </div>
+          </div>
+          <div id="dashboardSpotlightProducts" class="dashboard-spotlight-products"></div>
         </div>
       </section>
 
@@ -604,47 +682,114 @@
   </div>
 
   <div class="modal" id="productFormModal">
-    <div class="modal-content small-modal">
+    <div class="modal-content small-modal product-form-modal-card">
       <div class="modal-header">
-        <h2>إضافة منتج</h2>
+        <h2>إضافة منتج جديد</h2>
         <button class="icon-btn" id="closeProductFormModal" type="button">✕</button>
       </div>
 
-      <form id="addProductForm" class="form-grid">
-        <input class="field" id="pName" placeholder="اسم المنتج" required />
-        <textarea class="field" id="pDescription" placeholder="وصف المنتج" required></textarea>
+      <form id="addProductForm" class="form-grid product-create-form">
+        <section class="product-form-section product-form-media-section">
+          <div class="product-form-section-head">
+            <div>
+              <div class="product-form-kicker">الصور</div>
+              <h3>صورة المنتج</h3>
+            </div>
+          </div>
 
-        <div class="inline-fields">
-          <input class="field" id="pPrice" type="number" min="0" placeholder="السعر" required />
-          <select class="field" id="pCurrency">
-            <option value="ل.س">ل.س</option>
-            <option value="دولار">دولار</option>
-          </select>
+          <label class="product-upload-panel" for="pImages">
+            <div class="product-upload-emoji" aria-hidden="true">🖼️</div>
+            <strong>أضف صور المنتج</strong>
+            <p>يمكنك رفع حتى 5 صور. يفضل أن تكون واضحة وأقل من 1MB للصورة.</p>
+            <span class="product-upload-btn">اختيار الصور</span>
+          </label>
+          <input class="field product-upload-input" id="pImages" type="file" accept=".jpg,.jpeg,.png,.webp" multiple />
+          <div class="product-upload-preview" id="productImagePreview"></div>
+        </section>
+
+        <section class="product-form-section">
+          <div class="product-form-section-head">
+            <div>
+              <div class="product-form-kicker">البيانات الأساسية</div>
+              <h3>تفاصيل المنتج</h3>
+            </div>
+          </div>
+
+          <label class="product-form-field" for="pName">
+            <span>اسم المنتج</span>
+            <input class="field" id="pName" placeholder="مثال: هاتف Samsung A54" required />
+          </label>
+
+          <label class="product-form-field" for="pDescription">
+            <span>وصف المنتج</span>
+            <textarea class="field product-form-textarea" id="pDescription" placeholder="اكتب وصفاً مختصراً وواضحاً للمنتج..." required></textarea>
+          </label>
+
+          <div class="product-form-row">
+            <label class="product-form-field" for="pPrice">
+              <span>السعر</span>
+              <input class="field" id="pPrice" type="number" min="0" placeholder="مثال: 325000" required />
+            </label>
+            <label class="product-form-field" for="pCurrency">
+              <span>العملة</span>
+              <select class="field" id="pCurrency">
+                <option value="ل.س">ل.س</option>
+                <option value="دولار">دولار</option>
+              </select>
+            </label>
+          </div>
+
+          <div class="product-form-row">
+            <label class="product-form-field" for="pCategory">
+              <span>التصنيف</span>
+              <input class="field" id="pCategory" placeholder="مثال: إلكترونيات" required />
+            </label>
+            <label class="product-form-field" for="pRegion">
+              <span>المنطقة</span>
+              <input class="field" id="pRegion" placeholder="مثال: دمشق، المزة" required />
+            </label>
+          </div>
+
+          <div class="product-form-row">
+            <label class="product-form-field" for="pCondition">
+              <span>الحالة</span>
+              <select class="field" id="pCondition">
+                <option value="جديد">جديد</option>
+                <option value="مستعمل كالجديد">مستعمل كالجديد</option>
+                <option value="مستعمل بحالة جيدة">مستعمل بحالة جيدة</option>
+              </select>
+            </label>
+            <label class="product-form-field" for="pQuantity">
+              <span>المخزون</span>
+              <input class="field" id="pQuantity" type="number" min="1" value="1" />
+            </label>
+          </div>
+
+          <div class="product-form-row">
+            <label class="product-form-field" for="pStatus">
+              <span>حالة النشر</span>
+              <select class="field" id="pStatus">
+                <option value="published">نشر مباشرة</option>
+                <option value="draft">حفظ كمسودة</option>
+                <option value="hidden">إضافة كمخفي</option>
+              </select>
+            </label>
+            <label class="product-form-field" for="pTags">
+              <span>وسوم</span>
+              <input class="field" id="pTags" placeholder="مثال: هاتف، سامسونج، حديث" />
+            </label>
+          </div>
+
+          <label class="check-field product-delivery-check">
+            <input id="pHasDeliveryService" type="checkbox" />
+            <span>أوفر خدمة توصيل / نقل لهذا المنتج</span>
+          </label>
+        </section>
+
+        <div class="product-form-actions">
+          <button class="btn btn-outline" id="productFormCancelBtn" type="button">إلغاء</button>
+          <button class="btn btn-primary" type="submit">نشر المنتج</button>
         </div>
-
-        <div class="inline-fields">
-          <input class="field" id="pCategory" placeholder="التصنيف" required />
-          <input class="field" id="pRegion" placeholder="المنطقة" required />
-        </div>
-
-        <div class="inline-fields">
-          <select class="field" id="pCondition">
-            <option value="جديد">جديد</option>
-            <option value="مستعمل كالجديد">مستعمل كالجديد</option>
-            <option value="مستعمل بحالة جيدة">مستعمل بحالة جيدة</option>
-          </select>
-          <input class="field" id="pQuantity" type="number" min="1" value="1" />
-        </div>
-
-        <input class="field" id="pTags" placeholder="وسوم مفصولة بفواصل" />
-        <label class="check-field">
-          <input id="pHasDeliveryService" type="checkbox" />
-          <span>أوفر خدمة توصيل / نقل لهذا المنتج</span>
-        </label>
-        <input class="field" id="pImages" type="file" accept=".jpg,.jpeg,.png,.webp" multiple />
-        <p class="muted" style="margin:0;">يفضل أن تكون كل صورة أقل من 1MB</p>
-
-        <button class="btn btn-primary" type="submit">حفظ المنتج</button>
       </form>
     </div>
   </div>

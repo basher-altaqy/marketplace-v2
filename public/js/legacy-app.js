@@ -23,7 +23,12 @@ const state = {
   cart: null,
   currentProduct: null,
   orders: [],
+  orderFilterStatus: "all",
   activeOrder: null,
+  dashboardProducts: [],
+  dashboardProductSearch: "",
+  dashboardProductStatus: "all",
+  dashboardProductSort: "newest",
   notifications: [],
   siteAppearance: {
     backgroundImage: "",
@@ -155,21 +160,129 @@ function setCartItemSubmittingUi(itemId, isSubmitting) {
 function renderDashboardStats(summary = {}) {
   if (!statsGrid) return;
   statsGrid.innerHTML = `
-    <div class="stat-card"><div class="label">المنتجات</div><div class="value">${Number(summary.totalProducts || 0)}</div></div>
-    <div class="stat-card"><div class="label">المسودات</div><div class="value">${Number(summary.draftProducts || 0)}</div></div>
-    <div class="stat-card"><div class="label">المنشورة</div><div class="value">${Number(summary.publishedProducts || 0)}</div></div>
-    <div class="stat-card"><div class="label">المخفية</div><div class="value">${Number(summary.hiddenProducts || 0)}</div></div>
-    <div class="stat-card"><div class="label">المباعة</div><div class="value">${Number(summary.soldProducts || 0)}</div></div>
-    <div class="stat-card"><div class="label">المؤرشفة</div><div class="value">${Number(summary.archivedProducts || 0)}</div></div>
-    <div class="stat-card"><div class="label">المشاهدات</div><div class="value">${Number(summary.totalViews || 0)}</div></div>
-    <div class="stat-card"><div class="label">التقييم</div><div class="value">${Number(summary.averageRating || 0).toFixed(1)}</div></div>
+    <div class="stat-card dashboard-stat-card"><div class="stat-icon">💰</div><div class="value">${Number(summary.totalRevenue || 0).toLocaleString("ar")}</div><div class="label">إجمالي المبيعات</div></div>
+    <div class="stat-card dashboard-stat-card"><div class="stat-icon">📦</div><div class="value">${Number(state.orders?.length || 0)}</div><div class="label">طلبات جديدة</div></div>
+    <div class="stat-card dashboard-stat-card"><div class="stat-icon">📋</div><div class="value">${Number(summary.publishedProducts || summary.totalProducts || 0)}</div><div class="label">منتج نشط</div></div>
+    <div class="stat-card dashboard-stat-card"><div class="stat-icon">⭐</div><div class="value">${Number(summary.averageRating || 0).toFixed(1)}</div><div class="label">تقييم المتجر</div></div>
+    <div class="stat-card dashboard-stat-card"><div class="stat-icon">👁️</div><div class="value">${Number(summary.totalViews || 0).toLocaleString("ar")}</div><div class="label">إجمالي المشاهدات</div></div>
+    <div class="stat-card dashboard-stat-card"><div class="stat-icon">📝</div><div class="value">${Number(summary.draftProducts || 0)}</div><div class="label">مسودات</div></div>
   `;
+}
+
+function getFilteredDashboardProducts() {
+  const query = String(state.dashboardProductSearch || "").trim().toLowerCase();
+  const statusFilter = String(state.dashboardProductStatus || "all");
+  const sortKey = String(state.dashboardProductSort || "newest");
+  const items = [...(state.dashboardProducts || [])]
+    .filter((product) => statusFilter === "all" ? true : String(product.status || "") === statusFilter)
+    .filter((product) => {
+      if (!query) return true;
+      const haystack = [
+        product.name,
+        product.category,
+        product.region,
+        product.status
+      ].join(" ").toLowerCase();
+      return haystack.includes(query);
+    });
+
+  items.sort((a, b) => {
+    if (sortKey === "priceAsc") return Number(a.price || 0) - Number(b.price || 0);
+    if (sortKey === "priceDesc") return Number(b.price || 0) - Number(a.price || 0);
+    if (sortKey === "views") return Number(b.viewsCount || 0) - Number(a.viewsCount || 0);
+    if (sortKey === "status") return String(a.status || "").localeCompare(String(b.status || ""), "ar");
+    return new Date(b.createdAt || 0).getTime() - new Date(a.createdAt || 0).getTime();
+  });
+
+  return items;
+}
+
+function renderDashboardRecentOrders() {
+  if (!dashboardRecentOrders) return;
+  const recentOrders = [...(state.orders || [])]
+    .sort((a, b) => new Date(b.createdAt || 0).getTime() - new Date(a.createdAt || 0).getTime())
+    .slice(0, 4);
+
+  if (!recentOrders.length) {
+    dashboardRecentOrders.innerHTML = `<div class="soft-empty">لا توجد طلبات حديثة حالياً.</div>`;
+    return;
+  }
+
+  dashboardRecentOrders.innerHTML = recentOrders.map((order) => `
+    <button class="dashboard-order-row" data-dashboard-order="${order.id}" type="button">
+      <div class="dashboard-order-main">
+        <strong>#${order.id}</strong>
+        <span>${escapeHtml(getOrderPartyName(order, true) || "مشتري")}</span>
+        <span>${order.createdAt ? new Date(order.createdAt).toLocaleDateString("ar") : ""}</span>
+      </div>
+      <div class="dashboard-order-secondary">
+        <span class="dashboard-order-total">${formatPrice(order.totalAmount || 0, "ل.س")}</span>
+        <span class="order-card-status ${getOrderStatusBadgeClass(order.status)}">${escapeHtml(formatOrderStatus(order.status))}</span>
+      </div>
+    </button>
+  `).join("");
+
+  dashboardRecentOrders.querySelectorAll("[data-dashboard-order]").forEach((button) => {
+    button.addEventListener("click", async () => {
+      await loadOrders();
+      showView("orders");
+      await loadOrderDetails(Number(button.dataset.dashboardOrder));
+    });
+  });
+}
+
+function renderDashboardSpotlightProducts(products = []) {
+  if (!dashboardSpotlightProducts) return;
+  const spotlight = [...products]
+    .sort((a, b) => Number(b.viewsCount || 0) - Number(a.viewsCount || 0))
+    .slice(0, 4);
+
+  if (!spotlight.length) {
+    dashboardSpotlightProducts.innerHTML = `<div class="soft-empty">لا توجد منتجات بارزة حالياً.</div>`;
+    return;
+  }
+
+  dashboardSpotlightProducts.innerHTML = spotlight.map((product) => `
+    <div class="dashboard-spotlight-card">
+      ${product.image ? `<img class="dashboard-spotlight-thumb" src="${escapeHtml(product.image)}" alt="${escapeHtml(product.name)}" loading="lazy">` : `<div class="dashboard-spotlight-thumb dashboard-spotlight-thumb-placeholder"></div>`}
+      <div class="dashboard-spotlight-copy">
+        <strong>${escapeHtml(product.name || "")}</strong>
+        <div class="muted">${formatPrice(product.price || 0, product.currency || "ل.س")}</div>
+      </div>
+      <span class="dashboard-spotlight-badge">مشاهدات: ${Number(product.viewsCount || 0)}</span>
+    </div>
+  `).join("");
+}
+
+function renderDashboardProducts() {
+  if (!myProductsGrid) return;
+  const products = getFilteredDashboardProducts();
+  if (dashboardProductsCounter) {
+    dashboardProductsCounter.textContent = `${products.length} ${products.length === 1 ? "منتج" : "منتج"}`;
+  }
+  myProductsGrid.innerHTML = products.length
+    ? products.map(managedProductCardHtml).join("")
+    : `<p class="muted">لا توجد منتجات مطابقة لهذا الفلتر حالياً.</p>`;
+
+  bindManagedProductCard(myProductsGrid);
+  renderDashboardSpotlightProducts(state.dashboardProducts || []);
 }
 
 function bindManagedProductCard(scope) {
   scope?.querySelectorAll("[data-my-product-status]").forEach((btn) => {
     btn.addEventListener("click", () => {
       updateMyProductStatus(Number(btn.dataset.myProductStatus), btn.dataset.next);
+    });
+  });
+  scope?.querySelectorAll("[data-dashboard-open-product]").forEach((btn) => {
+    btn.addEventListener("click", async () => {
+      const productId = Number(btn.dataset.dashboardOpenProduct || 0);
+      if (!productId) return;
+      if (typeof window.navigateTo === "function") {
+        await window.navigateTo(`/product/${productId}`);
+        return;
+      }
+      await openProductPage(productId);
     });
   });
   if (scope) bindProductActions(scope);
@@ -286,6 +399,7 @@ const sortBy = document.getElementById("sortBy");
 const globalSearchForm = document.getElementById("globalSearchForm");
 const globalSearchInput = document.getElementById("globalSearchInput");
 const searchArea = document.getElementById("searchArea");
+const searchQuickActions = document.querySelector(".search-quick-actions");
 const navSearchToggleBtn = document.getElementById("navSearchToggleBtn");
 const closeSearchAreaBtn = document.getElementById("closeSearchAreaBtn");
 const siteBrandTitle = document.getElementById("siteBrandTitle");
@@ -344,6 +458,9 @@ const closeProductModal = document.getElementById("closeProductModal");
 
 const productFormModal = document.getElementById("productFormModal");
 const closeProductFormModal = document.getElementById("closeProductFormModal");
+const productFormCancelBtn = document.getElementById("productFormCancelBtn");
+const productImagesInput = document.getElementById("pImages");
+const productImagePreview = document.getElementById("productImagePreview");
 const reportModal = document.getElementById("reportModal");
 const closeReportModal = document.getElementById("closeReportModal");
 const deliveryInfoModal = document.getElementById("deliveryInfoModal");
@@ -367,6 +484,16 @@ let lastMobileScrollY = 0;
 const dashboardUserInfo = document.getElementById("dashboardUserInfo");
 const statsGrid = document.getElementById("statsGrid");
 const myProductsGrid = document.getElementById("myProductsGrid");
+const dashboardHeroTitle = document.getElementById("dashboardHeroTitle");
+const dashboardHeroSubtitle = document.getElementById("dashboardHeroSubtitle");
+const dashboardQuickActions = document.getElementById("dashboardQuickActions");
+const dashboardRecentOrders = document.getElementById("dashboardRecentOrders");
+const dashboardOpenOrdersBtn = document.getElementById("dashboardOpenOrdersBtn");
+const dashboardProductsCounter = document.getElementById("dashboardProductsCounter");
+const dashboardProductSearch = document.getElementById("dashboardProductSearch");
+const dashboardProductStatusFilter = document.getElementById("dashboardProductStatusFilter");
+const dashboardProductSort = document.getElementById("dashboardProductSort");
+const dashboardSpotlightProducts = document.getElementById("dashboardSpotlightProducts");
 const favoritesGrid = document.getElementById("favoritesGrid");
 const cartItemsList = document.getElementById("cartItemsList");
 const cartSummaryPanel = document.getElementById("cartSummaryPanel");
@@ -377,6 +504,7 @@ const checkoutNotes = document.getElementById("checkoutNotes");
 const confirmCheckoutBtn = document.getElementById("confirmCheckoutBtn");
 const ordersList = document.getElementById("ordersList");
 const orderDetailsPanel = document.getElementById("orderDetailsPanel");
+const ordersTabs = document.getElementById("ordersTabs");
 
 const sellerSummary = document.getElementById("sellerSummary");
 const sellerProductsGrid = document.getElementById("sellerProductsGrid");
@@ -491,6 +619,31 @@ function openModal(modal) {
 
 function closeModal(modal) {
   modal?.classList.remove("open");
+}
+
+function renderProductImagePreview() {
+  if (!productImagePreview) return;
+  const files = Array.from(productImagesInput?.files || []).slice(0, 5);
+
+  if (!files.length) {
+    productImagePreview.innerHTML = `
+      <div class="product-upload-empty">
+        <span aria-hidden="true">＋</span>
+        <span>لم يتم اختيار صور بعد</span>
+      </div>
+    `;
+    return;
+  }
+
+  productImagePreview.innerHTML = files.map((file) => {
+    const safeName = escapeHtml(file.name || "صورة");
+    return `
+      <div class="product-upload-preview-chip">
+        <span class="product-upload-preview-name">${safeName}</span>
+        <span class="product-upload-preview-size">${Math.max(1, Math.round(file.size / 1024))} KB</span>
+      </div>
+    `;
+  }).join("");
 }
 
 function scrollViewportToTop() {
@@ -865,7 +1018,7 @@ function getMobileBottomNavItems() {
       { key: "search", label: "بحث", icon: "⌕", type: "action", value: "search" },
       { key: "messages", label: "محادثات", icon: "✉", type: "route", value: "/conversations", badge: Number(state.conversations?.length || 0) },
       { key: "dashboard", label: "لوحتي", icon: "▦", type: "route", value: "/dashboard" },
-      { key: "profile", label: "حسابي", icon: "◉", type: "route", value: "/profile" }
+      { key: "orders", label: "طلبات", icon: "📦", type: "route", value: "/orders", badge: Number(state.orders?.length || 0) }
     ];
   }
 
@@ -1388,11 +1541,22 @@ async function loadOrders() {
   state.orders = data.orders || [];
   refreshNavBadges();
   renderOrders();
+  const filteredOrders = getFilteredOrders();
+  const currentVisibleOrder = filteredOrders.find((order) => order.id === state.activeOrder?.id);
+  if (!filteredOrders.length) {
+    state.activeOrder = null;
+    renderOrderDetails();
+    return;
+  }
+  if (!currentVisibleOrder) {
+    await loadOrderDetails(filteredOrders[0].id);
+  }
 }
 
 async function loadOrderDetails(orderId) {
   const data = await api(`/api/orders/${Number(orderId)}`);
   state.activeOrder = data.order || null;
+  renderOrders();
   renderOrderDetails();
 }
 
@@ -2030,6 +2194,13 @@ function bindProductActions(scope = document) {
     card.addEventListener("click", async (event) => {
       const interactiveTarget = event.target.closest("button, a, input, select, textarea, label");
       if (interactiveTarget) return;
+      if (isTouchLikeViewport && !card.classList.contains("is-mobile-actions-visible")) {
+        document.querySelectorAll(".product-card.product-card-refined.is-mobile-actions-visible").forEach((otherCard) => {
+          if (otherCard !== card) otherCard.classList.remove("is-mobile-actions-visible");
+        });
+        card.classList.add("is-mobile-actions-visible");
+        return;
+      }
       await openCardProduct();
     });
 
@@ -2252,6 +2423,7 @@ function renderProductView(product) {
   const stockQuantity = Number(product.quantity || 0);
   const hasStockLimit = Number.isFinite(stockQuantity) && stockQuantity > 0;
   const canStartInquiry = state.user?.role === "buyer" && state.user.id !== product.seller.id;
+  const canBuyDirect = !state.user || state.user.id !== product.seller.id;
   const productInfo = formatDetailRows([
     { label: "التصنيف", value: product.category },
     { label: "الموقع", value: product.region },
@@ -2303,8 +2475,8 @@ function renderProductView(product) {
           <div class="modal-purchase-box store-purchase-box">
             <div class="modal-purchase-head">
               <div>
-                <div class="detail-card-title">أضف إلى السلة</div>
-                <div class="muted">اختر الكمية المطلوبة ثم أضف المنتج إلى سلتك للانتقال إلى إتمام الشراء.</div>
+                <div class="detail-card-title">الشراء</div>
+                <div class="muted">يمكنك الإضافة إلى السلة أو تنفيذ شراء مباشر وفتح المحادثة فوراً.</div>
               </div>
               <div class="modal-cart-stock">${hasStockLimit ? `المتوفر: ${stockQuantity}` : "الكمية حسب الطلب"}</div>
             </div>
@@ -2315,6 +2487,10 @@ function renderProductView(product) {
                 <button class="modal-qty-btn" data-product-qty-change="1" type="button" aria-label="زيادة الكمية">+</button>
               </div>
               <button class="btn btn-success store-buy-btn" id="productViewAddToCartBtn" type="button">أضف إلى السلة</button>
+              ${canBuyDirect
+                ? `<button class="btn btn-primary store-direct-buy-btn" id="productViewDirectBuyBtn" type="button">شراء مباشر</button>`
+                : ""
+              }
             </div>
           </div>
 
@@ -2370,6 +2546,11 @@ function renderProductView(product) {
   document.getElementById("productViewAddToCartBtn")?.addEventListener("click", async () => {
     const quantity = normalizeProductViewQuantity();
     await addProductToCart(product.id, quantity);
+  });
+
+  document.getElementById("productViewDirectBuyBtn")?.addEventListener("click", async () => {
+    const quantity = normalizeProductViewQuantity();
+    await purchaseProduct(product.id, quantity);
   });
 
   document.getElementById("productViewInquiryBtn")?.addEventListener("click", async () => {
@@ -2966,41 +3147,210 @@ function renderCart() {
 
 }
 
+function getOrderStatusFilterOptions() {
+  const orderedKeys = ["submitted", "seller_confirmed", "buyer_confirmed", "in_preparation", "in_transport", "completed", "cancelled"];
+  const labels = {
+    submitted: "الجديدة",
+    seller_confirmed: "المقبولة",
+    buyer_confirmed: "قيد المتابعة",
+    in_preparation: "قيد التحضير",
+    in_transport: "قيد النقل",
+    completed: "المكتملة",
+    cancelled: "المرفوضة"
+  };
+
+  const statuses = Array.from(new Set((state.orders || []).map((order) => String(order.status || "").trim()).filter(Boolean)));
+  const sortedStatuses = orderedKeys.filter((status) => statuses.includes(status)).concat(
+    statuses.filter((status) => !orderedKeys.includes(status))
+  );
+
+  return [
+    { key: "all", label: "الكل" },
+    ...sortedStatuses.map((status) => ({ key: status, label: labels[status] || formatOrderStatus(status) }))
+  ];
+}
+
+function getFilteredOrders() {
+  const activeFilter = String(state.orderFilterStatus || "all");
+  if (activeFilter === "all") return [...(state.orders || [])];
+  return (state.orders || []).filter((order) => String(order.status || "") === activeFilter);
+}
+
+function getOrderPartyName(order, isSellerView = isSellerUser()) {
+  return isSellerView
+    ? String(order?.buyerName || order?.buyer?.fullName || order?.buyer?.name || "").trim()
+    : String(order?.sellerName || order?.seller?.storeName || order?.seller?.fullName || "").trim();
+}
+
+function getOrderAddress(order, isSellerView = isSellerUser()) {
+  const directAddress = isSellerView
+    ? order?.buyerAddress || order?.shippingAddress || order?.deliveryAddress || order?.address
+    : order?.sellerAddress || order?.seller?.address;
+  const partyRegion = isSellerView
+    ? order?.buyerRegion || order?.buyer?.region
+    : order?.sellerRegion || order?.seller?.region;
+  return String(directAddress || partyRegion || "").trim();
+}
+
+function getOrderPreviewItems(order) {
+  return Array.isArray(order?.items) ? order.items.slice(0, 2) : [];
+}
+
+function getOrderStatusBadgeClass(status) {
+  const tone = getOrderStatusTone(status);
+  if (tone === "status-success") return "is-success";
+  if (tone === "status-danger") return "is-danger";
+  if (tone === "status-progress") return "is-progress";
+  if (tone === "status-accent") return "is-accent";
+  return "is-pending";
+}
+
+function renderOrderTabs() {
+  if (!ordersTabs) return;
+  const options = getOrderStatusFilterOptions();
+
+  ordersTabs.innerHTML = options.map((option) => {
+    const count = option.key === "all"
+      ? (state.orders || []).length
+      : (state.orders || []).filter((order) => String(order.status || "") === option.key).length;
+
+    return `
+      <button class="orders-status-tab ${state.orderFilterStatus === option.key ? "is-active" : ""}" data-order-filter="${escapeHtml(option.key)}" type="button">
+        <span>${escapeHtml(option.label)}</span>
+        <strong>${count}</strong>
+      </button>
+    `;
+  }).join("");
+
+  ordersTabs.querySelectorAll("[data-order-filter]").forEach((button) => {
+    button.addEventListener("click", async () => {
+      state.orderFilterStatus = String(button.dataset.orderFilter || "all");
+      renderOrders();
+      const filteredOrders = getFilteredOrders();
+      if (!filteredOrders.length) {
+        state.activeOrder = null;
+        renderOrderDetails();
+        return;
+      }
+      if (!filteredOrders.find((order) => order.id === state.activeOrder?.id)) {
+        await loadOrderDetails(filteredOrders[0].id);
+      }
+    });
+  });
+}
+
 function renderOrders() {
   if (!ordersList) return;
   const isSellerView = isSellerUser();
-  const counterpartLabel = isSellerView ? "المشتري" : "البائع";
-  if (!state.orders.length) {
+  const filteredOrders = getFilteredOrders();
+  renderOrderTabs();
+
+  if (!filteredOrders.length) {
     setSoftEmpty(ordersList, isSellerView ? "لا توجد طلبات واردة بعد." : "لا توجد طلبات بعد.");
     if (orderDetailsPanel) orderDetailsPanel.innerHTML = `اختر طلبًا لعرض تفاصيله`;
     return;
   }
 
-  ordersList.innerHTML = state.orders.map((order) => `
-    <a class="list-item order-item-card marketplace-order-card" href="/order/${order.id}" data-route="/order/${order.id}" data-open-order="${order.id}">
-      <div class="order-row-head">
-        <strong>طلب #${order.id}</strong>
-        <span class="deal-status ${getOrderStatusTone(order.status)}">${escapeHtml(formatOrderStatus(order.status))}</span>
-      </div>
-      <div class="order-inline-meta">
-        <span class="muted">المصدر: ${escapeHtml(formatOrderSource(order.sourceType))}</span>
-        <span class="muted">الإجمالي: ${formatPrice(order.totalAmount, "ل.س")}</span>
-      </div>
-      <div class="muted">${counterpartLabel}: ${escapeHtml(isSellerView ? (order.buyerName || "") : (order.sellerName || ""))}</div>
-      <div class="muted">عدد العناصر: ${order.itemsCount || 0}</div>
-      <div class="order-state-copy">${escapeHtml(getOrderStatusExplanation(order))}</div>
-      <div class="muted">${order.createdAt ? new Date(order.createdAt).toLocaleString("ar") : ""}</div>
-    </a>
-  `).join("");
+  ordersList.innerHTML = filteredOrders.map((order) => {
+    const counterpartName = getOrderPartyName(order, isSellerView) || "-";
+    const address = getOrderAddress(order, isSellerView);
+    const previewItems = getOrderPreviewItems(order);
+    const quickPrimaryAction = getAllowedOrderActions(order)[0] || null;
 
-  ordersList.querySelectorAll("[data-open-order]").forEach((btn) => {
-    btn.addEventListener("click", async (event) => {
-      if (typeof window.navigateTo === "function") {
-        event.preventDefault();
-        await window.navigateTo(`/order/${Number(btn.dataset.openOrder)}`);
-        return;
-      }
-      await loadOrderDetails(Number(btn.dataset.openOrder));
+    return `
+      <article class="order-card-pro ${state.activeOrder?.id === order.id ? "is-active" : ""}" data-open-order="${order.id}" tabindex="0" aria-label="عرض تفاصيل الطلب ${order.id}">
+        <div class="order-card-pro-head">
+          <div class="order-card-head-main">
+            <span class="order-card-id">#${order.id}</span>
+            <span class="order-card-date">${order.createdAt ? new Date(order.createdAt).toLocaleDateString("ar") : ""}</span>
+          </div>
+          <span class="order-card-status ${getOrderStatusBadgeClass(order.status)}">${escapeHtml(formatOrderStatus(order.status))}</span>
+        </div>
+
+        <div class="order-card-party">
+          <div class="order-card-party-name">
+            <span aria-hidden="true">${isSellerView ? "🧑‍💼" : "🏪"}</span>
+            <strong>${escapeHtml(counterpartName)}</strong>
+          </div>
+          ${address ? `
+            <div class="order-card-party-address">
+              <span aria-hidden="true">📍</span>
+              <span>${escapeHtml(address)}</span>
+            </div>
+          ` : ""}
+        </div>
+
+        <div class="order-card-products">
+          ${previewItems.length ? previewItems.map((item) => `
+            <div class="order-card-product-item">
+              ${item.product?.image ? `<img class="order-card-product-thumb" src="${escapeHtml(item.product.image)}" alt="${escapeHtml(item.product?.name || "")}" loading="lazy">` : `<div class="order-card-product-thumb order-card-product-thumb-placeholder" aria-hidden="true"></div>`}
+              <div class="order-card-product-copy">
+                <div class="order-card-product-name">${escapeHtml(item.product?.name || "منتج")}</div>
+                <div class="order-card-product-meta">
+                  <span>الكمية: ${Number(item.quantity || 0)}</span>
+                  <span>${formatPrice(item.lineTotal || item.price || 0, item.product?.currency || "ل.س")}</span>
+                </div>
+              </div>
+            </div>
+          `).join("") : `
+            <div class="order-card-fallback-meta">
+              <span>المصدر: ${escapeHtml(formatOrderSource(order.sourceType))}</span>
+              <span>عدد العناصر: ${Number(order.itemsCount || 0)}</span>
+            </div>
+          `}
+        </div>
+
+        <div class="order-card-total">
+          <span>الإجمالي</span>
+          <strong>${formatPrice(order.totalAmount, "ل.س")}</strong>
+        </div>
+
+        <div class="order-card-actions">
+          <button class="btn btn-outline" data-order-card-chat="${order.id}" type="button">محادثة</button>
+          ${quickPrimaryAction
+            ? `<button class="btn ${quickPrimaryAction.tone}" data-order-card-status="${escapeHtml(quickPrimaryAction.key)}" data-order-id="${order.id}" type="button">${escapeHtml(quickPrimaryAction.label)}</button>`
+            : `<button class="btn btn-light" data-order-card-details="${order.id}" type="button">عرض التفاصيل</button>`
+          }
+        </div>
+      </article>
+    `;
+  }).join("");
+
+  ordersList.querySelectorAll("[data-open-order]").forEach((node) => {
+    node.addEventListener("click", async (event) => {
+      const actionTrigger = event.target.closest("[data-order-card-chat], [data-order-card-status]");
+      if (actionTrigger) return;
+      await loadOrderDetails(Number(node.dataset.openOrder));
+    });
+
+    node.addEventListener("keydown", async (event) => {
+      if (event.key !== "Enter" && event.key !== " ") return;
+      if (event.target.closest("[data-order-card-chat], [data-order-card-status]")) return;
+      event.preventDefault();
+      await loadOrderDetails(Number(node.dataset.openOrder));
+    });
+  });
+
+  ordersList.querySelectorAll("[data-order-card-chat]").forEach((button) => {
+    button.addEventListener("click", async (event) => {
+      event.stopPropagation();
+      const order = filteredOrders.find((item) => item.id === Number(button.dataset.orderCardChat));
+      if (!order) return;
+      await goToOrderConversation(order);
+    });
+  });
+
+  ordersList.querySelectorAll("[data-order-card-status]").forEach((button) => {
+    button.addEventListener("click", async (event) => {
+      event.stopPropagation();
+      await updateOrderStatus(Number(button.dataset.orderId), button.dataset.orderCardStatus);
+    });
+  });
+
+  ordersList.querySelectorAll("[data-order-card-details]").forEach((button) => {
+    button.addEventListener("click", async (event) => {
+      event.stopPropagation();
+      await loadOrderDetails(Number(button.dataset.orderCardDetails));
     });
   });
 }
@@ -3018,14 +3368,37 @@ function renderOrderDetails() {
   const isSellerView = isSellerUser();
   const counterpartLabel = isSellerView ? "المشتري" : "البائع";
   const counterpartName = isSellerView ? order.buyerName : order.sellerName;
+  const counterpartAddress = getOrderAddress(order, isSellerView);
 
   orderDetailsPanel.innerHTML = `
-    <div class="summary-box order-details-box">
-      <div class="summary-line"><span>رقم الطلب</span><strong>#${order.id}</strong></div>
-      <div class="summary-line"><span>${counterpartLabel}</span><strong>${escapeHtml(counterpartName || "")}</strong></div>
-      <div class="summary-line"><span>الحالة</span><strong><span class="deal-status ${getOrderStatusTone(order.status)}">${escapeHtml(formatOrderStatus(order.status))}</span></strong></div>
-      <div class="summary-line"><span>الإجمالي</span><strong>${formatPrice(order.totalAmount, "ل.س")}</strong></div>
-      <div class="summary-line"><span>المحادثة المرتبطة</span><strong>${order.conversationId ? ("#" + order.conversationId) : "غير متوفرة"}</strong></div>
+    <div class="order-details-hero">
+      <div class="order-details-hero-head">
+        <div>
+          <div class="order-details-eyebrow">طلب #${order.id}</div>
+          <h3>${escapeHtml(formatOrderStatus(order.status))}</h3>
+        </div>
+        <span class="order-card-status ${getOrderStatusBadgeClass(order.status)}">${escapeHtml(formatOrderStatus(order.status))}</span>
+      </div>
+
+      <div class="order-details-party">
+        <div class="order-card-party-name">
+          <span aria-hidden="true">${isSellerView ? "🧑‍💼" : "🏪"}</span>
+          <strong>${escapeHtml(counterpartName || counterpartLabel)}</strong>
+        </div>
+        ${counterpartAddress ? `
+          <div class="order-card-party-address">
+            <span aria-hidden="true">📍</span>
+            <span>${escapeHtml(counterpartAddress)}</span>
+          </div>
+        ` : ""}
+      </div>
+
+      <div class="order-details-summary-grid">
+        <div class="order-details-stat"><span>الإجمالي</span><strong>${formatPrice(order.totalAmount, "ل.س")}</strong></div>
+        <div class="order-details-stat"><span>العناصر</span><strong>${Number(order.itemsCount || order.items?.length || 0)}</strong></div>
+        <div class="order-details-stat"><span>المصدر</span><strong>${escapeHtml(formatOrderSource(order.sourceType))}</strong></div>
+        <div class="order-details-stat"><span>المحادثة</span><strong>${order.conversationId ? ("#" + order.conversationId) : "غير متوفرة"}</strong></div>
+      </div>
     </div>
 
     <div class="order-progress-strip ${order.status === "cancelled" ? "is-cancelled" : ""}">
@@ -3055,8 +3428,8 @@ function renderOrderDetails() {
       `).join("")}
     </div>
 
-    <div class="order-item-actions" style="margin-top:14px;">
-      <button class="btn btn-secondary" data-order-conversation="${order.id}" type="button">${order.conversationId ? "الذهاب إلى المحادثة" : "مراسلة البائع"}</button>
+    <div class="order-item-actions order-item-actions-pro" style="margin-top:14px;">
+      <button class="btn btn-secondary" data-order-conversation="${order.id}" type="button">${order.conversationId ? "فتح المحادثة" : "مراسلة ${counterpartLabel}"}</button>
     </div>
 
     ${actions.length ? `
@@ -3163,28 +3536,34 @@ async function loadDashboard() {
   if (!state.user || state.user.role !== "seller") return;
 
   try {
-    const [summaryData, productsData] = await Promise.all([
+    const [summaryData, productsData, ordersData] = await Promise.all([
       api("/api/dashboard/summary"),
-      api("/api/my/products")
+      api("/api/my/products"),
+      api("/api/orders")
     ]);
 
     const summary = summaryData.summary || {};
     const products = normalizeProducts(productsData.products || []);
+    state.orders = ordersData.orders || [];
     state.dashboardSummary = summary;
+    state.dashboardProducts = products;
 
     if (dashboardUserInfo) {
       dashboardUserInfo.textContent = `${state.user.storeName || state.user.fullName || ""} - ${state.user.region || ""}`;
     }
 
-    renderDashboardStats(summary);
-
-    if (myProductsGrid) {
-      myProductsGrid.innerHTML = products.length
-        ? products.map(managedProductCardHtml).join("")
-        : `<p class="muted">لا توجد منتجات بعد.</p>`;
-
-      bindManagedProductCard(myProductsGrid);
+    if (dashboardHeroTitle) {
+      dashboardHeroTitle.textContent = `مرحباً، ${state.user.storeName || state.user.fullName || "التاجر"}`;
     }
+
+    if (dashboardHeroSubtitle) {
+      dashboardHeroSubtitle.textContent = "إليك ملخص متجرك اليوم، وأحدث الطلبات، وأسرع الطرق لإدارة المنتجات من مكان واحد.";
+    }
+
+    renderDashboardStats(summary);
+    renderDashboardRecentOrders();
+    renderDashboardProducts();
+    refreshNavBadges();
   } catch (error) {
     console.error(error);
   }
@@ -3228,6 +3607,7 @@ async function handleAddProductSubmit(event) {
     const newProduct = data?.product ? normalizeProducts([data.product])[0] : null;
     showToast("تمت إضافة المنتج");
     addProductForm?.reset();
+    renderProductImagePreview();
     closeModal(productFormModal);
 
     const dashboardUpdated = newProduct ? prependManagedProduct(newProduct) : false;
@@ -4809,25 +5189,66 @@ async function updateMyProductStatus(productId, status) {
 }
 
 function managedProductCardHtml(product) {
+  const statusLabelMap = {
+    draft: "مسودة",
+    published: "منشور",
+    hidden: "مخفي",
+    sold: "مباع",
+    archived: "مؤرشف"
+  };
+  const statusLabel = statusLabelMap[product.status] || product.status || "-";
+  const stockQuantity = Number(product.quantity || 0);
+  const stockLabel = Number.isFinite(stockQuantity) && stockQuantity > 0 ? stockQuantity : "حسب الطلب";
+  const actions = [
+    { type: "open", icon: "↗", label: "عرض المنتج", className: "dashboard-icon-open" },
+    {
+      type: "status",
+      next: product.status === "published" ? "hidden" : "published",
+      icon: product.status === "published" ? "🙈" : "✈",
+      label: product.status === "published" ? "إخفاء المنتج" : "نشر المنتج",
+      className: product.status === "published" ? "dashboard-icon-hide" : "dashboard-icon-publish"
+    },
+    {
+      type: "status",
+      next: product.status === "sold" ? "draft" : "sold",
+      icon: product.status === "sold" ? "📝" : "✓",
+      label: product.status === "sold" ? "إعادته كمسودة" : "تحديده كمباع",
+      className: product.status === "sold" ? "dashboard-icon-draft" : "dashboard-icon-sold"
+    },
+    { type: "status", next: "archived", icon: "🗑", label: "أرشفة المنتج", className: "dashboard-icon-delete" }
+  ];
+
   return `
-    <div class="list-item managed-product-card">
+    <article class="list-item managed-product-card managed-product-card-mini">
       <div class="managed-product-head">
         ${product.image ? `<img src="${escapeHtml(product.image)}" alt="${escapeHtml(product.name)}" class="managed-product-image" />` : `<div class="managed-product-image managed-product-image-placeholder"></div>`}
         <div class="managed-product-copy">
-          <strong>${escapeHtml(product.name)}</strong>
-          <div class="muted">${escapeHtml(product.category || "")} - ${escapeHtml(product.region || "")}</div>
-          <div class="muted">${formatPrice(product.price, product.currency)}</div>
-          <div class="muted">الحالة الحالية: ${escapeHtml(product.status || "")}</div>
+          <div class="managed-product-title-row">
+            <strong>${escapeHtml(product.name)}</strong>
+          </div>
+          <div class="managed-product-meta-row">
+            <span>SKU: #${product.id}</span>
+            <span>المخزون: ${stockLabel}</span>
+            <span>المشاهدات: ${Number(product.viewsCount || 0).toLocaleString("ar")}</span>
+          </div>
+          <div class="managed-product-support-row">
+            <span>${escapeHtml(product.category || "بدون تصنيف")}</span>
+            <span>${escapeHtml(product.region || "بدون منطقة")}</span>
+          </div>
+        </div>
+        <div class="managed-product-side">
+          <span class="managed-product-status-chip managed-product-status-${escapeHtml(product.status || "draft")}">${escapeHtml(statusLabel)}</span>
+          <div class="managed-product-price">${formatPrice(product.price, product.currency)}</div>
+          <span class="managed-product-side-note">${product.hasDeliveryService ? "توصيل متاح" : "بدون توصيل"}</span>
         </div>
       </div>
-      <div class="nav-actions managed-product-actions">
-        <button class="btn btn-light" type="button" data-my-product-status="${product.id}" data-next="draft">مسودة</button>
-        <button class="btn btn-light" type="button" data-my-product-status="${product.id}" data-next="published">نشر</button>
-        <button class="btn btn-light" type="button" data-my-product-status="${product.id}" data-next="hidden">إخفاء</button>
-        <button class="btn btn-outline" type="button" data-my-product-status="${product.id}" data-next="sold">مباع</button>
-        <button class="btn btn-outline" type="button" data-my-product-status="${product.id}" data-next="archived">أرشفة</button>
+      <div class="nav-actions managed-product-actions managed-product-actions-mini">
+        ${actions.map((action) => action.type === "open"
+          ? `<button class="managed-action-icon ${action.className}" type="button" data-dashboard-open-product="${product.id}" aria-label="${escapeHtml(action.label)}" title="${escapeHtml(action.label)}">${action.icon}</button>`
+          : `<button class="managed-action-icon ${action.className}" type="button" data-my-product-status="${product.id}" data-next="${escapeHtml(action.next)}" aria-label="${escapeHtml(action.label)}" title="${escapeHtml(action.label)}">${action.icon}</button>`
+        ).join("")}
       </div>
-    </div>
+    </article>
   `;
 }
 
@@ -4855,6 +5276,21 @@ function bindStaticEvents() {
     setMobileHeaderMenuOpen(!state.mobileHeaderMenuOpen);
   });
   closeSearchAreaBtn?.addEventListener("click", closeSearchArea);
+  searchQuickActions?.addEventListener("click", async (event) => {
+    const trigger = event.target.closest("[data-search-shortcut]");
+    if (!trigger) return;
+
+    const shortcutValue = String(trigger.dataset.searchShortcut || "").trim();
+    if (!shortcutValue) return;
+
+    state.search = shortcutValue;
+    if (globalSearchInput) globalSearchInput.value = shortcutValue;
+    if (filterKeyword) filterKeyword.value = shortcutValue;
+    syncMobileFilterControls();
+    await loadProducts();
+    showView("home");
+    closeSearchArea();
+  });
   searchArea?.addEventListener("click", (event) => {
     if (event.target === searchArea || event.target.closest(".search-area-backdrop")) {
       closeSearchArea();
@@ -4981,7 +5417,14 @@ function bindStaticEvents() {
   });
 
   closeProductModal?.addEventListener("click", () => closeModal(productModal));
-  closeProductFormModal?.addEventListener("click", () => closeModal(productFormModal));
+  closeProductFormModal?.addEventListener("click", () => {
+    closeModal(productFormModal);
+    renderProductImagePreview();
+  });
+  productFormCancelBtn?.addEventListener("click", () => {
+    closeModal(productFormModal);
+    renderProductImagePreview();
+  });
   closeDeliveryInfoModal?.addEventListener("click", () => closeModal(deliveryInfoModal));
   closeConfirmModal?.addEventListener("click", () => resolveConfirm(false));
   closeContentModal?.addEventListener("click", () => closeModal(contentModal));
@@ -4993,8 +5436,14 @@ function bindStaticEvents() {
   });
 
   productFormModal?.addEventListener("click", (e) => {
-    if (e.target === productFormModal) closeModal(productFormModal);
+    if (e.target === productFormModal) {
+      closeModal(productFormModal);
+      renderProductImagePreview();
+    }
   });
+
+  productImagesInput?.addEventListener("change", renderProductImagePreview);
+  renderProductImagePreview();
 
   deliveryInfoModal?.addEventListener("click", (e) => {
     if (e.target === deliveryInfoModal) closeModal(deliveryInfoModal);
@@ -5115,6 +5564,48 @@ function bindStaticEvents() {
 
   document.getElementById("openAddProductFromDashboard")?.addEventListener("click", () => {
     openModal(productFormModal);
+  });
+
+  dashboardQuickActions?.addEventListener("click", async (event) => {
+    const trigger = event.target.closest("[data-dashboard-action]");
+    if (!trigger) return;
+    const action = String(trigger.dataset.dashboardAction || "");
+    if (action === "add-product") {
+      openModal(productFormModal);
+      return;
+    }
+    if (action === "orders") {
+      await loadOrders();
+      showView("orders");
+      return;
+    }
+    if (action === "products") {
+      document.getElementById("myProductsGrid")?.scrollIntoView({ behavior: "smooth", block: "start" });
+      return;
+    }
+    if (action === "refresh") {
+      await loadDashboard();
+    }
+  });
+
+  dashboardOpenOrdersBtn?.addEventListener("click", async () => {
+    await loadOrders();
+    showView("orders");
+  });
+
+  dashboardProductSearch?.addEventListener("input", () => {
+    state.dashboardProductSearch = dashboardProductSearch.value || "";
+    renderDashboardProducts();
+  });
+
+  dashboardProductStatusFilter?.addEventListener("change", () => {
+    state.dashboardProductStatus = dashboardProductStatusFilter.value || "all";
+    renderDashboardProducts();
+  });
+
+  dashboardProductSort?.addEventListener("change", () => {
+    state.dashboardProductSort = dashboardProductSort.value || "newest";
+    renderDashboardProducts();
   });
 
   document.getElementById("refreshConversationsBtn")?.addEventListener("click", async () => {
@@ -6024,26 +6515,40 @@ bootstrapPromise.finally(async () => {
 });
 
 function formatOrderStatus(status) {
+  const isSeller = isSellerUser();
   const labels = {
-    submitted: "بانتظار رد التاجر",
-    seller_confirmed: "مقبول من التاجر",
+    submitted: isSeller ? "بانتظار ردك" : "بانتظار رد التاجر",
+    seller_confirmed: isSeller ? "تم قبول الطلب" : "مقبول من التاجر",
     buyer_confirmed: "مقبول (مسار قديم)",
     in_preparation: "قيد التنفيذ (مسار قديم)",
     in_transport: "قيد النقل (مسار قديم)",
-    cancelled: "مرفوض",
+    cancelled: isSeller ? "تم الرفض أو الإلغاء" : "مرفوض",
     completed: "مكتمل (مسار قديم)"
   };
   return labels[status] || status || "-";
 }
 
 function getOrderStatusExplanation(order) {
+  const isSeller = isSellerUser();
   const messages = {
-    submitted: "تم إرسال طلب الشراء وهو الآن بانتظار رد التاجر.",
-    seller_confirmed: "وافق التاجر على طلب الشراء. تابع التفاصيل من داخل المحادثة المرتبطة بالطلب.",
-    buyer_confirmed: "هذا الطلب يتبع مسارًا قديمًا محفوظًا للعرض فقط في النسخة الحالية.",
-    in_preparation: "هذا الطلب يتبع مسارًا قديمًا وانتقل إلى مرحلة لاحقة خارج نطاق النسخة الأولى.",
-    in_transport: "هذا الطلب يتبع مسارًا قديمًا وانتقل إلى مرحلة لاحقة خارج نطاق النسخة الأولى.",
-    cancelled: "تم رفض الطلب من التاجر أو إلغاؤه ولن تظهر له إجراءات إضافية.",
+    submitted: isSeller
+      ? "تم استلام طلب شراء جديد وهو الآن بانتظار قرارك بالقبول أو الرفض."
+      : "تم إرسال طلب الشراء وهو الآن بانتظار رد التاجر.",
+    seller_confirmed: isSeller
+      ? "قمت بقبول هذا الطلب، ويمكنك متابعة التفاصيل من داخل المحادثة المرتبطة به."
+      : "وافق التاجر على طلب الشراء. تابع التفاصيل من داخل المحادثة المرتبطة بالطلب.",
+    buyer_confirmed: isSeller
+      ? "هذا الطلب يتبع مسارًا قديمًا محفوظًا للعرض فقط في النسخة الحالية."
+      : "هذا الطلب يتبع مسارًا قديمًا محفوظًا للعرض فقط في النسخة الحالية.",
+    in_preparation: isSeller
+      ? "هذا الطلب يتبع مسارًا قديمًا وانتقل إلى مرحلة لاحقة خارج نطاق النسخة الأولى."
+      : "هذا الطلب يتبع مسارًا قديمًا وانتقل إلى مرحلة لاحقة خارج نطاق النسخة الأولى.",
+    in_transport: isSeller
+      ? "هذا الطلب يتبع مسارًا قديمًا وانتقل إلى مرحلة لاحقة خارج نطاق النسخة الأولى."
+      : "هذا الطلب يتبع مسارًا قديمًا وانتقل إلى مرحلة لاحقة خارج نطاق النسخة الأولى.",
+    cancelled: isSeller
+      ? "تم رفض هذا الطلب أو إلغاؤه، ولن تظهر له إجراءات إضافية."
+      : "تم رفض الطلب من التاجر أو إلغاؤه ولن تظهر له إجراءات إضافية.",
     completed: "هذا الطلب يتبع مسارًا قديمًا وتم إكماله بالفعل."
   };
   return messages[order?.status] || "لا توجد تفاصيل إضافية لهذه الحالة حاليًا.";
