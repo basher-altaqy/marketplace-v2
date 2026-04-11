@@ -35,7 +35,12 @@ const state = {
   dashboardSummary: null,
   metaLoaded: false,
   mobileConversationsOpen: false,
-  mobileHeaderMenuOpen: false
+  mobileHeaderMenuOpen: false,
+  mobileFiltersOpen: false,
+  mobileActiveSheet: "",
+  mobileNavContext: {
+    view: "home"
+  }
 };
 
 const V1_FLAGS = {
@@ -310,6 +315,24 @@ const navLogoutBtn = document.getElementById("navLogoutBtn");
 const mobileHeaderMenu = document.getElementById("mobileHeaderMenu");
 const mobileHeaderMenuToggle = document.getElementById("mobileHeaderMenuToggle");
 const mobileHeaderDropdown = document.getElementById("mobileHeaderDropdown");
+const mobileBottomNav = document.getElementById("mobileBottomNav");
+const mobileSheetBackdrop = document.getElementById("mobileSheetBackdrop");
+const mobileHeaderSheet = document.getElementById("mobileHeaderSheet");
+const mobileHeaderSheetMenu = document.getElementById("mobileHeaderSheetMenu");
+const mobileHeaderSheetCloseBtn = document.getElementById("mobileHeaderSheetCloseBtn");
+const mobileFiltersToolbar = document.getElementById("mobileFiltersToolbar");
+const mobileFiltersResultsCount = document.getElementById("mobileFiltersResultsCount");
+const mobileSortBy = document.getElementById("mobileSortBy");
+const mobileFiltersOpenBtn = document.getElementById("mobileFiltersOpenBtn");
+const mobileFiltersSheet = document.getElementById("mobileFiltersSheet");
+const mobileFiltersCloseBtn = document.getElementById("mobileFiltersCloseBtn");
+const mobileFilterKeyword = document.getElementById("mobileFilterKeyword");
+const mobileFilterCategory = document.getElementById("mobileFilterCategory");
+const mobileFilterRegion = document.getElementById("mobileFilterRegion");
+const mobileSheetSortBy = document.getElementById("mobileSheetSortBy");
+const mobileFiltersApplyBtn = document.getElementById("mobileFiltersApplyBtn");
+const mobileFiltersResetBtn = document.getElementById("mobileFiltersResetBtn");
+const mobileCategoryChips = document.getElementById("mobileCategoryChips");
 
 const catalogBackBtn = document.getElementById("catalogBackBtn");
 const productBackBtn = document.getElementById("productBackBtn");
@@ -339,6 +362,7 @@ const reportForm = document.getElementById("reportForm");
 
 let homeCategoryMarqueeControllers = [];
 let rtlScrollTypeCache = null;
+let lastMobileScrollY = 0;
 
 const dashboardUserInfo = document.getElementById("dashboardUserInfo");
 const statsGrid = document.getElementById("statsGrid");
@@ -377,6 +401,9 @@ const confirmModalCancelBtn = document.getElementById("confirmModalCancelBtn");
 const confirmModalApproveBtn = document.getElementById("confirmModalApproveBtn");
 const contentModalTitle = document.getElementById("contentModalTitle");
 const contentModalBody = document.getElementById("contentModalBody");
+const conversationOrderSheetModal = document.getElementById("conversationOrderSheetModal");
+const closeConversationOrderSheetBtn = document.getElementById("closeConversationOrderSheetBtn");
+const conversationOrderSheetContent = document.getElementById("conversationOrderSheetContent");
 const supportFloatingBtn = document.getElementById("supportFloatingBtn");
 const supportWidget = document.getElementById("supportWidget");
 const closeSupportWidgetBtn = document.getElementById("closeSupportWidgetBtn");
@@ -631,13 +658,29 @@ function syncTopbarScrollState() {
   const topbar = document.querySelector(".topbar");
   if (!topbar) return;
   topbar.classList.toggle("topbar-scrolled", window.scrollY > 10);
+
+  if (window.innerWidth > 620) {
+    topbar.classList.remove("topbar-mobile-hidden");
+    lastMobileScrollY = Math.max(0, window.scrollY || 0);
+    return;
+  }
+
+  const currentY = Math.max(0, window.scrollY || 0);
+  const scrollingDown = currentY > lastMobileScrollY + 6;
+  const shouldForceVisible = currentY <= 36 || state.mobileActiveSheet || searchArea?.classList.contains("search-active");
+
+  topbar.classList.toggle("topbar-mobile-hidden", !shouldForceVisible && scrollingDown && currentY > 96);
+  lastMobileScrollY = currentY;
 }
 
 function openSearchArea() {
   if (!searchArea) return;
+  setMobileSheetState("");
   searchArea.classList.add("search-active");
   searchArea.setAttribute("aria-hidden", "false");
   document.body.classList.add("search-area-open");
+  document.querySelector(".topbar")?.classList.remove("topbar-mobile-hidden");
+  renderMobileBottomNav();
   window.setTimeout(() => globalSearchInput?.focus(), 80);
 }
 
@@ -646,6 +689,8 @@ function closeSearchArea() {
   searchArea.classList.remove("search-active");
   searchArea.setAttribute("aria-hidden", "true");
   document.body.classList.remove("search-area-open");
+  syncTopbarScrollState();
+  renderMobileBottomNav();
 }
 
 async function goToHomeSection(sectionId) {
@@ -653,6 +698,8 @@ async function goToHomeSection(sectionId) {
     const section = document.getElementById(sectionId);
     section?.scrollIntoView({ behavior: "smooth", block: "start" });
   };
+
+  setMobileSheetState("");
 
   if (!homeView?.classList.contains("hidden")) {
     scrollToTarget();
@@ -780,17 +827,151 @@ function refreshNav() {
   navAdminBtn?.classList.toggle("hidden", !isAdmin || !isV1FeatureEnabled("admin"));
   refreshNavBadges();
   renderMobileHeaderMenu();
+  renderMobileBottomNav();
+}
+
+function getActiveAppPath() {
+  const [pathname] = String(location.pathname || "/").split("?");
+  if (!pathname || pathname === "/") return "/";
+  return pathname.endsWith("/") ? pathname.slice(0, -1) : pathname;
+}
+
+function updateMobileNavContext(viewName = state.mobileNavContext?.view || "home") {
+  state.mobileNavContext = {
+    ...state.mobileNavContext,
+    view: getSafeViewName(viewName),
+    path: getActiveAppPath()
+  };
+}
+
+function getMobileBottomNavItems() {
+  const hasUser = !!state.user;
+  const isBuyer = hasUser && isBuyerUser();
+  const isSeller = hasUser && isSellerUser();
+
+  if (!hasUser) {
+    return [
+      { key: "home", label: "الرئيسية", icon: "⌂", type: "route", value: "/" },
+      { key: "products", label: "المنتجات", icon: "▦", type: "action", value: "filtersSection" },
+      { key: "search", label: "بحث", icon: "⌕", type: "action", value: "search" },
+      { key: "auth", label: "دخول", icon: "⇥", type: "route", value: "/auth" },
+      { key: "menu", label: "القائمة", icon: "☰", type: "action", value: "menu" }
+    ];
+  }
+
+  if (isSeller) {
+    return [
+      { key: "home", label: "الرئيسية", icon: "⌂", type: "route", value: "/" },
+      { key: "search", label: "بحث", icon: "⌕", type: "action", value: "search" },
+      { key: "messages", label: "محادثات", icon: "✉", type: "route", value: "/conversations", badge: Number(state.conversations?.length || 0) },
+      { key: "dashboard", label: "لوحتي", icon: "▦", type: "route", value: "/dashboard" },
+      { key: "profile", label: "حسابي", icon: "◉", type: "route", value: "/profile" }
+    ];
+  }
+
+  if (isBuyer) {
+    return [
+      { key: "home", label: "الرئيسية", icon: "⌂", type: "route", value: "/" },
+      { key: "search", label: "بحث", icon: "⌕", type: "action", value: "search" },
+      { key: "favorites", label: "المفضلة", icon: "♡", type: "route", value: "/favorites", badge: Number(state.favorites?.length || 0) },
+      { key: "cart", label: "السلة", icon: "🛒", type: "route", value: "/cart", badge: Number(state.cart?.totals?.quantity || 0) },
+      { key: "messages", label: "محادثات", icon: "✉", type: "route", value: "/conversations", badge: Number(state.conversations?.length || 0) }
+    ];
+  }
+
+  return [
+    { key: "home", label: "الرئيسية", icon: "⌂", type: "route", value: "/" },
+    { key: "search", label: "بحث", icon: "⌕", type: "action", value: "search" },
+    { key: "messages", label: "محادثات", icon: "✉", type: "route", value: "/conversations", badge: Number(state.conversations?.length || 0) },
+    { key: "favorites", label: "المفضلة", icon: "♡", type: "route", value: "/favorites", badge: Number(state.favorites?.length || 0) },
+    { key: "profile", label: "حسابي", icon: "◉", type: "route", value: "/profile" }
+  ];
+}
+
+function isMobileNavItemActive(item) {
+  const currentView = state.mobileNavContext?.view || "home";
+  const currentPath = state.mobileNavContext?.path || getActiveAppPath();
+  const currentMenuViews = new Set(["profile", "orders", "notifications", "admin"]);
+  const storefrontViews = new Set(["home", "catalog", "product", "seller"]);
+
+  if (item.key === "search") return searchArea?.classList.contains("search-active");
+  if (item.key === "products") return storefrontViews.has(currentView) || currentPath === "/";
+  if (item.key === "menu") return state.mobileActiveSheet === "menu" || currentMenuViews.has(currentView);
+  if (item.value === "/") return storefrontViews.has(currentView) || currentPath === "/";
+  if (item.value === "/auth") return currentView === "auth" || currentPath === "/auth";
+  if (item.value === "/favorites") return currentView === "favorites" || currentPath === "/favorites";
+  if (item.value === "/cart") return currentView === "cart" || currentPath === "/cart";
+  if (item.value === "/dashboard") return currentView === "dashboard" || currentPath === "/dashboard";
+  if (item.value === "/conversations") return currentView === "messages" || currentPath === "/conversations" || currentPath.startsWith("/conversation/");
+  if (item.value === "/profile") return currentView === "profile" || currentPath === "/profile";
+  return false;
+}
+
+function renderMobileBottomNav() {
+  if (!mobileBottomNav) return;
+  const items = getMobileBottomNavItems();
+
+  mobileBottomNav.innerHTML = items.map((item) => {
+    const isActive = isMobileNavItemActive(item);
+    const badge = Math.max(0, Number(item.badge || 0));
+    const badgeMarkup = badge > 0
+      ? `<span class="mobile-bottom-nav-badge">${badge}</span>`
+      : "";
+
+    return `
+      <button
+        class="mobile-bottom-nav-item ${isActive ? "is-active" : ""}"
+        data-mobile-bottom-type="${item.type}"
+        data-mobile-bottom-value="${escapeHtml(item.value)}"
+        type="button"
+        ${isActive ? 'aria-current="page"' : ""}
+      >
+        <span class="mobile-bottom-nav-icon" aria-hidden="true">${item.icon}</span>
+        <span class="mobile-bottom-nav-label">${item.label}</span>
+        ${badgeMarkup}
+      </button>
+    `;
+  }).join("");
+}
+
+function setMobileSheetState(sheetName = "") {
+  const nextSheet = String(sheetName || "");
+  const menuOpen = nextSheet === "menu";
+  const filtersOpen = nextSheet === "filters";
+
+  state.mobileActiveSheet = nextSheet;
+  state.mobileHeaderMenuOpen = menuOpen;
+  state.mobileFiltersOpen = filtersOpen;
+
+  document.body.classList.toggle("mobile-sheet-open", Boolean(nextSheet));
+  mobileSheetBackdrop?.classList.toggle("hidden", !nextSheet);
+  mobileSheetBackdrop?.setAttribute("aria-hidden", nextSheet ? "false" : "true");
+
+  mobileHeaderMenu?.classList.toggle("is-open", menuOpen);
+  mobileHeaderDropdown?.classList.add("hidden");
+  mobileHeaderSheet?.classList.toggle("hidden", !menuOpen);
+  mobileHeaderSheet?.setAttribute("aria-hidden", menuOpen ? "false" : "true");
+  mobileFiltersSheet?.classList.toggle("hidden", !filtersOpen);
+  mobileFiltersSheet?.setAttribute("aria-hidden", filtersOpen ? "false" : "true");
+  mobileHeaderMenuToggle?.setAttribute("aria-expanded", menuOpen ? "true" : "false");
+  mobileFiltersOpenBtn?.setAttribute("aria-expanded", filtersOpen ? "true" : "false");
+
+  document.querySelector(".topbar")?.classList.remove("topbar-mobile-hidden");
+  renderMobileBottomNav();
 }
 
 function setMobileHeaderMenuOpen(nextOpen) {
-  state.mobileHeaderMenuOpen = Boolean(nextOpen);
-  mobileHeaderMenu?.classList.toggle("is-open", state.mobileHeaderMenuOpen);
-  mobileHeaderDropdown?.classList.toggle("hidden", !state.mobileHeaderMenuOpen);
-  mobileHeaderMenuToggle?.setAttribute("aria-expanded", state.mobileHeaderMenuOpen ? "true" : "false");
+  if (nextOpen) renderMobileHeaderMenu();
+  setMobileSheetState(Boolean(nextOpen) ? "menu" : "");
+}
+
+function setMobileFiltersOpen(nextOpen) {
+  if (nextOpen) syncMobileFilterControls();
+  setMobileSheetState(Boolean(nextOpen) ? "filters" : "");
 }
 
 function renderMobileHeaderMenu() {
-  if (!mobileHeaderDropdown) return;
+  if (!mobileHeaderDropdown && !mobileHeaderSheetMenu) return;
   const hasUser = !!state.user;
   const isBuyer = hasUser && isBuyerUser();
   const isSeller = hasUser && isSellerUser();
@@ -798,8 +979,7 @@ function renderMobileHeaderMenu() {
 
   const items = [
     `<button class="mobile-header-dropdown-item" data-mobile-nav-action="home" type="button">الرئيسية</button>`,
-    `<button class="mobile-header-dropdown-item" data-mobile-nav-action="filtersSection" type="button">المنتجات</button>`,
-    `<button class="mobile-header-dropdown-item" data-mobile-nav-action="benefitsSection" type="button">لماذا نحن</button>`
+    `<button class="mobile-header-dropdown-item" data-mobile-nav-action="filtersSection" type="button">المنتجات</button>`
   ];
 
   if (!hasUser) {
@@ -817,7 +997,9 @@ function renderMobileHeaderMenu() {
     items.push(`<button class="mobile-header-dropdown-item is-danger" data-mobile-nav-action="logout" type="button">خروج</button>`);
   }
 
-  mobileHeaderDropdown.innerHTML = items.join("");
+  const markup = items.join("");
+  if (mobileHeaderDropdown) mobileHeaderDropdown.innerHTML = markup;
+  if (mobileHeaderSheetMenu) mobileHeaderSheetMenu.innerHTML = markup;
 }
 
 function setNavBadge(element, count) {
@@ -839,6 +1021,7 @@ function refreshNavBadges() {
   setNavBadge(navMessagesBadge, conversationsCount);
   setNavBadge(navNotificationsBadge, unreadNotifications);
   setNavBadge(navOrdersBadge, ordersCount);
+  renderMobileBottomNav();
 }
 
 function normalizeSiteAssetUrl(value) {
@@ -903,6 +1086,8 @@ function hideAllViews() {
 
 function showView(viewName) {
   const safeViewName = getSafeViewName(viewName);
+  updateMobileNavContext(safeViewName);
+  setMobileSheetState("");
   hideAllViews();
   if (safeViewName === "home") homeView?.classList.remove("hidden");
   if (safeViewName === "catalog") catalogView?.classList.remove("hidden");
@@ -925,6 +1110,8 @@ function showView(viewName) {
   window.dispatchEvent(new CustomEvent("marketplace:viewchange", {
     detail: { view: safeViewName }
   }));
+  syncIsolatedMessagesMode(safeViewName);
+  renderMobileBottomNav();
 }
 
 function normalizeProducts(products) {
@@ -1553,39 +1740,106 @@ function buildMetaFromProducts() {
   state.regions = regions.sort((a, b) => a.localeCompare(b, "ar"));
 }
 
-function renderFilters() {
-  if (!filterCategory || !filterRegion || !filterKeyword || !sortBy || !categoryChips) return;
+function syncDesktopFilterControls() {
+  if (filterKeyword) filterKeyword.value = state.search;
+  if (filterCategory) filterCategory.value = state.selectedCategory;
+  if (filterRegion) filterRegion.value = state.selectedRegion;
+  if (sortBy) sortBy.value = state.sort;
+}
 
-  filterCategory.innerHTML =
-    `<option value="all">كل التصنيفات</option>` +
-    state.categories.map((category) => {
-      const selected = state.selectedCategory === category ? "selected" : "";
-      return `<option value="${escapeHtml(category)}" ${selected}>${escapeHtml(category)}</option>`;
-    }).join("");
+function syncMobileFilterControls() {
+  if (mobileFilterKeyword) mobileFilterKeyword.value = state.search;
+  if (mobileFilterCategory) mobileFilterCategory.value = state.selectedCategory;
+  if (mobileFilterRegion) mobileFilterRegion.value = state.selectedRegion;
+  if (mobileSortBy) mobileSortBy.value = state.sort;
+  if (mobileSheetSortBy) mobileSheetSortBy.value = state.sort;
+}
 
-  filterRegion.innerHTML =
-    `<option value="all">كل المناطق</option>` +
-    state.regions.map((region) => {
-      const selected = state.selectedRegion === region ? "selected" : "";
-      return `<option value="${escapeHtml(region)}" ${selected}>${escapeHtml(region)}</option>`;
-    }).join("");
+function updateMobileFiltersSummary(productsCount = state.filteredProducts?.length || state.products?.length || 0) {
+  const safeCount = Math.max(0, Number(productsCount || 0));
+  if (resultsCount) {
+    resultsCount.textContent = `${safeCount} منتج`;
+    resultsCount.classList.toggle("hidden", safeCount <= 0);
+    resultsCount.setAttribute("aria-hidden", safeCount <= 0 ? "true" : "false");
+  }
+  if (mobileFiltersResultsCount) {
+    mobileFiltersResultsCount.textContent = `${safeCount} منتج`;
+  }
+  mobileFiltersToolbar?.classList.toggle(
+    "has-active-filters",
+    Boolean(state.search || state.selectedCategory !== "all" || state.selectedRegion !== "all" || state.sort !== "newest")
+  );
+}
 
-  filterKeyword.value = state.search;
-  sortBy.value = state.sort;
+function renderFilterChips(container, { closeOnSelect = false } = {}) {
+  if (!container) return;
 
-  categoryChips.innerHTML = `
+  container.innerHTML = `
     <button class="chip ${state.selectedCategory === "all" ? "active" : ""}" data-chip-category="all">كل التصنيفات</button>
     ${state.categories.map((category) => `
       <button class="chip ${state.selectedCategory === category ? "active" : ""}" data-chip-category="${escapeHtml(category)}">${escapeHtml(category)}</button>
     `).join("")}
   `;
 
-  categoryChips.querySelectorAll("[data-chip-category]").forEach((btn) => {
+  container.querySelectorAll("[data-chip-category]").forEach((btn) => {
     btn.addEventListener("click", async () => {
-      state.selectedCategory = btn.dataset.chipCategory;
+      state.selectedCategory = btn.dataset.chipCategory || "all";
+      syncDesktopFilterControls();
+      syncMobileFilterControls();
       await loadProducts();
+      if (closeOnSelect) setMobileFiltersOpen(false);
     });
   });
+}
+
+async function applyFiltersFromSource(source = "desktop") {
+  if (source === "mobile") {
+    state.search = mobileFilterKeyword?.value?.trim() || "";
+    state.selectedCategory = mobileFilterCategory?.value || "all";
+    state.selectedRegion = mobileFilterRegion?.value || "all";
+    state.sort = mobileSheetSortBy?.value || mobileSortBy?.value || "newest";
+  } else if (source === "toolbar") {
+    state.sort = mobileSortBy?.value || "newest";
+  } else {
+    state.search = filterKeyword?.value?.trim() || "";
+    state.selectedCategory = filterCategory?.value || "all";
+    state.selectedRegion = filterRegion?.value || "all";
+    state.sort = sortBy?.value || "newest";
+  }
+
+  syncDesktopFilterControls();
+  syncMobileFilterControls();
+  await loadProducts();
+}
+
+function renderFilters() {
+  if (!filterCategory || !filterRegion || !filterKeyword || !sortBy || !categoryChips) return;
+
+  const categoryOptions =
+    `<option value="all">كل التصنيفات</option>` +
+    state.categories.map((category) => {
+      const selected = state.selectedCategory === category ? "selected" : "";
+      return `<option value="${escapeHtml(category)}" ${selected}>${escapeHtml(category)}</option>`;
+    }).join("");
+
+  const regionOptions =
+    `<option value="all">كل المناطق</option>` +
+    state.regions.map((region) => {
+      const selected = state.selectedRegion === region ? "selected" : "";
+      return `<option value="${escapeHtml(region)}" ${selected}>${escapeHtml(region)}</option>`;
+    }).join("");
+
+  filterCategory.innerHTML = categoryOptions;
+  if (mobileFilterCategory) mobileFilterCategory.innerHTML = categoryOptions;
+
+  filterRegion.innerHTML = regionOptions;
+  if (mobileFilterRegion) mobileFilterRegion.innerHTML = regionOptions;
+
+  syncDesktopFilterControls();
+  syncMobileFilterControls();
+  renderFilterChips(categoryChips);
+  renderFilterChips(mobileCategoryChips, { closeOnSelect: true });
+  updateMobileFiltersSummary(state.products.length);
 }
 
 
@@ -1612,7 +1866,7 @@ function productCardHtml(product) {
   else if (product.condition === "مستعمل بحالة جيدة") conditionClass = "condition-used-good";
 
   return `
-    <article class="product-card auction-card product-card-refined">
+    <article class="product-card auction-card product-card-refined" data-open-product-card="${product.id}" tabindex="0" aria-label="عرض تفاصيل ${title}">
       ${product.condition ? `<div class="condition-ribbon ${conditionClass}">${escapeHtml(product.condition)}</div>` : ""}
       <div class="product-image product-image-wrap">
         ${productImage}
@@ -1624,9 +1878,6 @@ function productCardHtml(product) {
         <div class="product-hover-actions" role="group" aria-label="إجراءات المنتج">
           <button class="product-hover-action product-hover-action-favorite ${favoriteActive ? "is-active-favorite" : ""}" data-toggle-favorite="${product.id}" type="button" aria-label="${favoriteLabel}" title="${favoriteLabel}">
             <span aria-hidden="true">${favoriteActive ? "♥" : "♡"}</span>
-          </button>
-          <button class="product-hover-action product-hover-action-detail" data-open-product="${product.id}" type="button" aria-label="عرض التفاصيل" title="عرض التفاصيل">
-            <span aria-hidden="true">⤢</span>
           </button>
           <button class="product-hover-action product-hover-action-cart" data-add-cart="${product.id}" type="button" aria-label="أضف إلى السلة" title="أضف إلى السلة">
             <span aria-hidden="true">🛒</span>
@@ -1758,30 +2009,38 @@ function bindProductActions(scope = document) {
 
   if (isTouchLikeViewport) {
     scope.querySelectorAll(".product-card.product-card-refined").forEach((card) => {
-      if (card.dataset.mobileRevealBound === "true") return;
-      card.dataset.mobileRevealBound = "true";
-
-      card.addEventListener("click", (event) => {
-        const interactiveTarget = event.target.closest("button, a, input, select, textarea, label");
-        const hoverActions = event.target.closest(".product-hover-actions");
-
-        if (interactiveTarget && hoverActions) return;
-        if (interactiveTarget && !event.target.closest(".product-card-refined")) return;
-
-        if (!card.classList.contains("is-mobile-actions-visible")) {
-          document.querySelectorAll(".product-card.product-card-refined.is-mobile-actions-visible").forEach((openCard) => {
-            if (openCard !== card) openCard.classList.remove("is-mobile-actions-visible");
-          });
-          card.classList.add("is-mobile-actions-visible");
-
-          if (!interactiveTarget) {
-            event.preventDefault();
-            event.stopPropagation();
-          }
-        }
-      });
+      card.classList.remove("is-mobile-actions-visible");
     });
   }
+
+  scope.querySelectorAll("[data-open-product-card]").forEach((card) => {
+    if (card.dataset.cardOpenBound === "true") return;
+    card.dataset.cardOpenBound = "true";
+
+    const openCardProduct = async () => {
+      const productId = Number(card.dataset.openProductCard || 0);
+      if (!productId) return;
+      if (typeof window.navigateTo === "function") {
+        await window.navigateTo(`/product/${productId}`);
+        return;
+      }
+      await openProductPage(productId);
+    };
+
+    card.addEventListener("click", async (event) => {
+      const interactiveTarget = event.target.closest("button, a, input, select, textarea, label");
+      if (interactiveTarget) return;
+      await openCardProduct();
+    });
+
+    card.addEventListener("keydown", async (event) => {
+      if (event.key !== "Enter" && event.key !== " ") return;
+      const interactiveTarget = event.target.closest("button, a, input, select, textarea, label");
+      if (interactiveTarget && interactiveTarget !== card) return;
+      event.preventDefault();
+      await openCardProduct();
+    });
+  });
 
   scope.querySelectorAll("[data-open-product]").forEach((btn) => {
     btn.addEventListener("click", async (event) => {
@@ -3328,20 +3587,22 @@ async function loadConversationsView() {
   try {
     const data = await api("/api/conversations");
     state.conversations = data.conversations || [];
+    const nextConversationId = Number(
+      state.selectedConversationId
+      || state.activeConversationId
+      || state.conversations[0]?.id
+      || 0
+    );
 
-    renderConversationsList(state.conversations, state.activeConversationId || null);
+    renderConversationsList(state.conversations, nextConversationId || null);
 
-    if (state.activeConversationId) {
-      const stillExists = state.conversations.find(c => c.id === state.activeConversationId);
-      if (stillExists) {
-        await openConversation(state.activeConversationId);
-      }
+    if (nextConversationId) {
+      await openConversation(nextConversationId);
+    } else {
+      renderConversationDetails(null);
     }
   } catch (error) {
     showToast(error.message);
-  } finally {
-    restoreUi();
-    endSubmission(submissionKey);
   }
 }
 
@@ -3381,13 +3642,17 @@ function renderConversationMessages(messages = []) {
       ? `<div class="chat-day-separator"><span>${escapeHtml(formatChatDayLabel(message.createdAt))}</span></div>`
       : "";
     lastDayKey = dayKey || lastDayKey;
+    const isOwn = message.senderId === state.user?.id;
 
     return `
       ${daySeparator}
-      <div class="chat-bubble ${message.senderId === state.user?.id ? "is-me is-own" : "is-other"}">
-        <div class="chat-body-row">
+      <div class="chat-row ${isOwn ? "is-me" : "is-other"}">
+        <div class="chat-bubble ${isOwn ? "is-me is-own" : "is-other"}">
           <div class="chat-body">${escapeHtml(message.body || "")}</div>
-          <span class="chat-time-inline">${escapeHtml(formatChatTime(message.createdAt))}</span>
+          <div class="chat-meta-inline">
+            <span class="chat-time-inline">${escapeHtml(formatChatTime(message.createdAt))}</span>
+            ${isOwn ? '<span class="chat-status-inline" aria-hidden="true">✓✓</span>' : ""}
+          </div>
         </div>
       </div>
     `;
@@ -3742,6 +4007,155 @@ function getConversationDisplayName(conversation) {
     : (conversation.seller?.storeName || conversation.seller?.fullName || "متجر");
 }
 
+function getConversationPresenceLabel(conversation) {
+  if (!conversation) return "آخر ظهور غير متاح";
+  if (conversation.status === "open") return "متاح للمراسلة الآن";
+  const lastActivity = conversation.lastMessageAt || conversation.updatedAt || conversation.createdAt;
+  if (!lastActivity) return "آخر ظهور غير متاح";
+  try {
+    return `آخر نشاط ${new Date(lastActivity).toLocaleString("ar", { hour: "2-digit", minute: "2-digit", day: "numeric", month: "short" })}`;
+  } catch (_error) {
+    return "آخر ظهور غير متاح";
+  }
+}
+
+function getPrimaryLinkedOrder(conversation) {
+  const linkedOrders = Array.isArray(conversation?.linkedOrders) ? conversation.linkedOrders : [];
+  return linkedOrders[0] || null;
+}
+
+function renderConversationOrderSheet(conversation) {
+  if (!conversationOrderSheetContent) return;
+
+  const order = getPrimaryLinkedOrder(conversation);
+  const product = conversation?.product || {};
+  const productTitle = escapeHtml(product.name || "منتج مرتبط");
+  const priceLabel = order
+    ? formatPrice(order.totalAmount || product.price || 0, product.currency || "ل.س")
+    : formatPrice(product.price || 0, product.currency || "ل.س");
+  const statusLabel = order
+    ? formatOrderStatus(order.status)
+    : formatConversationStatus(conversation?.status || "");
+  const imageMarkup = product.image
+    ? `<img class="chat-order-sheet-image" src="${escapeHtml(product.image)}" alt="${productTitle}" />`
+    : `<div class="chat-order-sheet-image chat-order-sheet-image-placeholder" aria-hidden="true"></div>`;
+
+  conversationOrderSheetContent.innerHTML = `
+    <div class="chat-order-sheet-card">
+      ${imageMarkup}
+      <div class="chat-order-sheet-copy">
+        <div class="chat-order-sheet-title">${productTitle}</div>
+        <div class="chat-order-sheet-price">${priceLabel}</div>
+        <div class="chat-order-sheet-status">${escapeHtml(statusLabel || "بدون حالة")}</div>
+        <div class="chat-order-sheet-actions">
+          <button class="btn btn-secondary" id="conversationOrderOpenProductBtn" type="button">عرض المنتج</button>
+          <button class="btn btn-light" id="conversationOrderOpenSellerBtn" type="button">عرض التاجر</button>
+        </div>
+      </div>
+    </div>
+  `;
+
+  document.getElementById("conversationOrderOpenProductBtn")?.addEventListener("click", async () => {
+    closeModal(conversationOrderSheetModal);
+    if (!product.id) return;
+    if (typeof window.navigateTo === "function") {
+      await window.navigateTo(`/product/${Number(product.id)}`);
+      return;
+    }
+    await openProductPage(Number(product.id));
+  });
+
+  document.getElementById("conversationOrderOpenSellerBtn")?.addEventListener("click", async () => {
+    closeModal(conversationOrderSheetModal);
+    const sellerId = Number(conversation?.sellerId || conversation?.seller?.id || 0);
+    if (!sellerId) return;
+    if (typeof window.navigateTo === "function") {
+      await window.navigateTo(`/seller/${sellerId}`);
+      return;
+    }
+    await openSellerPage(sellerId);
+  });
+}
+
+function openConversationOrderSheet(conversation) {
+  renderConversationOrderSheet(conversation);
+  openModal(conversationOrderSheetModal);
+}
+
+async function openActiveConversationsList() {
+  if (!state.user) return;
+
+  if (!Array.isArray(state.conversations) || !state.conversations.length) {
+    await loadMessages();
+  }
+
+  if (!Array.isArray(state.conversations) || !state.conversations.length) {
+    showToast("لا توجد محادثات فعالة حالياً");
+    return;
+  }
+
+  if (window.innerWidth > 900) {
+    const sidebar = document.querySelector(".conversations-card");
+    const activeCard = conversationsList?.querySelector(".conversation-card.is-active, .conversation-entry.is-active")
+      || conversationsList?.querySelector("[data-open-conversation]");
+
+    sidebar?.classList.add("is-attention");
+    window.setTimeout(() => sidebar?.classList.remove("is-attention"), 1400);
+
+    if (activeCard && typeof activeCard.scrollIntoView === "function") {
+      activeCard.scrollIntoView({ block: "nearest", behavior: "smooth" });
+      activeCard.focus?.();
+    }
+    return;
+  }
+
+  renderConversationsList(state.conversations, Number(state.selectedConversationId || state.activeConversation?.id || state.conversations[0]?.id || 0));
+  setMobileConversationPickerOpen(true);
+  window.setTimeout(() => {
+    mobileConversationsMenu?.querySelector("[data-open-conversation]")?.focus?.();
+  }, 40);
+}
+
+function getConversationAvatarToken(conversation, fallbackLabel = "") {
+  const raw = String(
+    conversation?.seller?.storeName
+    || conversation?.seller?.fullName
+    || conversation?.buyer?.fullName
+    || fallbackLabel
+    || ""
+  ).trim();
+  return raw ? raw.charAt(0) : "م";
+}
+
+function syncIsolatedMessagesMode(viewName = state.mobileNavContext?.view || "home") {
+  const isChatScreen = viewName === "messages" && window.innerWidth <= 900;
+  document.body.classList.toggle("chat-screen-active", isChatScreen);
+  if (!isChatScreen) {
+    supportWidget?.classList.add("hidden");
+    setMobileConversationPickerOpen(false);
+    closeModal(conversationOrderSheetModal);
+  }
+}
+
+async function handleConversationBackNavigation() {
+  setMobileConversationPickerOpen(false);
+  closeModal(conversationOrderSheetModal);
+
+  try {
+    if (window.history.length > 1) {
+      window.history.back();
+      return;
+    }
+  } catch (_error) {}
+
+  if (typeof window.navigateTo === "function") {
+    await window.navigateTo("/");
+    return;
+  }
+
+  showView("home");
+}
+
 function createConversationCardMarkup(conversation, activeConversationId = null) {
   const otherPartyName = getConversationDisplayName(conversation);
   const initial = String(otherPartyName || "م").slice(0, 1);
@@ -4004,12 +4418,24 @@ function renderConversationsList(conversations, activeConversationId = null) {
   }
 
   if (mobileConversationsMenu) {
-    mobileConversationsMenu.innerHTML = filtered.map((conversation) => `
-      <button class="mobile-conversation-option ${activeConversationId === conversation.id ? "is-active" : ""}" data-open-conversation="${conversation.id}" type="button">
-        <strong>${escapeHtml(getConversationDisplayName(conversation))}</strong>
-        <span>${escapeHtml(conversation.product?.name || "بدون منتج")}</span>
-      </button>
-    `).join("");
+    mobileConversationsMenu.innerHTML = `
+      <div class="mobile-conversations-sheet-head">
+        <div class="mobile-conversations-sheet-handle" aria-hidden="true"></div>
+        <div class="mobile-conversations-sheet-title">المحادثات</div>
+        <input class="mobile-conversations-search" id="mobileConversationSearchField" type="search" placeholder="ابحث في المحادثات..." value="${escapeHtml(searchValue)}" />
+      </div>
+      <div class="mobile-conversations-sheet-list">
+        ${filtered.map((conversation) => `
+          <button class="mobile-conversation-option ${activeConversationId === conversation.id ? "is-active" : ""}" data-open-conversation="${conversation.id}" type="button">
+            <span class="mobile-conversation-avatar" aria-hidden="true">${escapeHtml(getConversationAvatarToken(conversation, getConversationDisplayName(conversation)))}</span>
+            <span class="mobile-conversation-copy">
+              <strong>${escapeHtml(getConversationDisplayName(conversation))}</strong>
+              <span>${escapeHtml(conversation.product?.name || "بدون منتج")}</span>
+            </span>
+          </button>
+        `).join("")}
+      </div>
+    `;
   }
 
   const bindOpenConversation = (scope) => {
@@ -4017,7 +4443,7 @@ function renderConversationsList(conversations, activeConversationId = null) {
       item.addEventListener("click", async (event) => {
         const conversationId = Number(item.dataset.openConversation);
         setMobileConversationPickerOpen(false);
-        if (typeof window.navigateTo === "function") {
+        if (typeof window.navigateTo === "function" && window.innerWidth > 900) {
           event.preventDefault();
           await window.navigateTo(`/conversation/${conversationId}`);
           return;
@@ -4029,6 +4455,12 @@ function renderConversationsList(conversations, activeConversationId = null) {
 
   bindOpenConversation(listEl);
   bindOpenConversation(mobileConversationsMenu);
+  document.getElementById("mobileConversationSearchField")?.addEventListener("input", (event) => {
+    const nextValue = String(event.target?.value || "");
+    const desktopSearch = document.getElementById("conversationQuickSearch");
+    if (desktopSearch) desktopSearch.value = nextValue;
+    renderConversationsList(state.conversations, activeConversationId);
+  });
 }
 
 function renderSupportConversation() {
@@ -4196,12 +4628,129 @@ async function loadInlineAdmin() {
   }
 }
 
+async function handleMobileNavigationAction(action) {
+  const normalizedAction = String(action || "");
+  if (!normalizedAction) return;
+
+  if (normalizedAction === "menu") {
+    setMobileHeaderMenuOpen(!state.mobileHeaderMenuOpen);
+    return;
+  }
+
+  if (normalizedAction === "search") {
+    setMobileSheetState("");
+    openSearchArea();
+    return;
+  }
+
+  setMobileSheetState("");
+
+  if (normalizedAction === "home") {
+    if (typeof window.navigateTo === "function") {
+      await window.navigateTo("/");
+      return;
+    }
+    showView("home");
+    return;
+  }
+
+  if (normalizedAction === "filtersSection" || normalizedAction === "benefitsSection") {
+    await goToHomeSection(normalizedAction);
+    return;
+  }
+
+  if (normalizedAction === "login") {
+    if (typeof window.navigateTo === "function") {
+      await window.navigateTo("/auth");
+      return;
+    }
+    showView("auth");
+    return;
+  }
+
+  if (normalizedAction === "profile") {
+    if (typeof window.navigateTo === "function") {
+      await window.navigateTo("/profile");
+      return;
+    }
+    fillProfileFormFromUser();
+    showView("profile");
+    return;
+  }
+
+  if (normalizedAction === "messages") {
+    if (typeof window.navigateTo === "function") {
+      await window.navigateTo("/conversations");
+      return;
+    }
+    await loadMessages();
+    showView("messages");
+    return;
+  }
+
+  if (normalizedAction === "notifications") {
+    await loadNotifications();
+    showView("notifications");
+    return;
+  }
+
+  if (normalizedAction === "favorites") {
+    if (typeof window.navigateTo === "function") {
+      await window.navigateTo("/favorites");
+      return;
+    }
+    await loadFavorites();
+    showView("favorites");
+    return;
+  }
+
+  if (normalizedAction === "cart") {
+    if (typeof window.navigateTo === "function") {
+      await window.navigateTo("/cart");
+      return;
+    }
+    await loadCart();
+    showView("cart");
+    return;
+  }
+
+  if (normalizedAction === "orders") {
+    if (typeof window.navigateTo === "function") {
+      await window.navigateTo("/orders");
+      return;
+    }
+    await loadOrders();
+    showView("orders");
+    return;
+  }
+
+  if (normalizedAction === "dashboard") {
+    if (typeof window.navigateTo === "function") {
+      await window.navigateTo("/dashboard");
+      return;
+    }
+    await loadDashboard();
+    showView("dashboard");
+    return;
+  }
+
+  if (normalizedAction === "add-product") {
+    openModal(productFormModal);
+    return;
+  }
+
+  if (normalizedAction === "admin") {
+    if (state.user?.role === "admin") window.location.href = "/admin";
+    return;
+  }
+
+  if (normalizedAction === "logout") {
+    navLogoutBtn?.click();
+  }
+}
+
 async function handleSearchAndFilters() {
-  state.search = filterKeyword?.value?.trim() || "";
-  state.selectedCategory = filterCategory?.value || "all";
-  state.selectedRegion = filterRegion?.value || "all";
-  state.sort = sortBy?.value || "newest";
-  await loadProducts();
+  await applyFiltersFromSource("desktop");
 }
 
 function updateResultsCount(products) {
@@ -4294,6 +4843,7 @@ function bindStaticEvents() {
     e.preventDefault();
     state.search = globalSearchInput?.value?.trim() || "";
     if (filterKeyword) filterKeyword.value = state.search;
+    syncMobileFilterControls();
     await loadProducts();
     showView("home");
     closeSearchArea();
@@ -4311,7 +4861,10 @@ function bindStaticEvents() {
     }
   });
   document.addEventListener("keydown", (event) => {
-    if (event.key === "Escape") closeSearchArea();
+    if (event.key === "Escape") {
+      closeSearchArea();
+      setMobileSheetState("");
+    }
   });
 
   document.querySelectorAll("[data-home-scroll]").forEach((trigger) => {
@@ -4321,73 +4874,105 @@ function bindStaticEvents() {
     });
   });
 
-  mobileHeaderDropdown?.addEventListener("click", async (event) => {
+  const onMobileMenuAction = async (event) => {
     const trigger = event.target.closest("[data-mobile-nav-action]");
     if (!trigger) return;
-    const action = String(trigger.dataset.mobileNavAction || "");
-    setMobileHeaderMenuOpen(false);
+    await handleMobileNavigationAction(trigger.dataset.mobileNavAction || "");
+  };
 
-    if (action === "home") {
-      showView("home");
-      return;
-    }
-    if (action === "filtersSection" || action === "benefitsSection") {
-      await goToHomeSection(action);
-      return;
-    }
-    if (action === "login") {
-      showView("auth");
-      return;
-    }
-    if (action === "profile") {
-      fillProfileFormFromUser();
-      showView("profile");
-      return;
-    }
-    if (action === "messages") {
-      await loadMessages();
-      showView("messages");
-      return;
-    }
-    if (action === "notifications") {
-      await loadNotifications();
-      showView("notifications");
-      return;
-    }
-    if (action === "favorites") {
-      await loadFavorites();
-      showView("favorites");
-      return;
-    }
-    if (action === "cart") {
-      await loadCart();
-      showView("cart");
-      return;
-    }
-    if (action === "orders") {
-      await loadOrders();
-      showView("orders");
-      return;
-    }
-    if (action === "dashboard") {
-      await loadDashboard();
-      showView("dashboard");
-      return;
-    }
-    if (action === "add-product") {
-      openModal(productFormModal);
-      return;
-    }
-    if (action === "admin") {
-      if (state.user?.role === "admin") window.location.href = "/admin";
-      return;
-    }
-    if (action === "logout") {
-      navLogoutBtn?.click();
-    }
+  mobileHeaderDropdown?.addEventListener("click", onMobileMenuAction);
+  mobileHeaderSheetMenu?.addEventListener("click", onMobileMenuAction);
+
+  mobileHeaderSheetCloseBtn?.addEventListener("click", () => setMobileHeaderMenuOpen(false));
+  mobileFiltersOpenBtn?.addEventListener("click", () => {
+    setMobileFiltersOpen(!state.mobileFiltersOpen);
   });
+  mobileFiltersCloseBtn?.addEventListener("click", () => setMobileFiltersOpen(false));
+  mobileSheetBackdrop?.addEventListener("click", () => setMobileSheetState(""));
 
   document.getElementById("applyFiltersBtn")?.addEventListener("click", handleSearchAndFilters);
+  mobileFiltersApplyBtn?.addEventListener("click", async () => {
+    await applyFiltersFromSource("mobile");
+    setMobileFiltersOpen(false);
+  });
+  mobileFiltersResetBtn?.addEventListener("click", async () => {
+    state.search = "";
+    state.selectedCategory = "all";
+    state.selectedRegion = "all";
+    state.sort = "newest";
+    syncDesktopFilterControls();
+    syncMobileFilterControls();
+    await loadProducts();
+    setMobileFiltersOpen(false);
+  });
+  mobileSortBy?.addEventListener("change", async () => {
+    await applyFiltersFromSource("toolbar");
+  });
+  mobileFilterKeyword?.addEventListener("keydown", async (event) => {
+    if (event.key !== "Enter") return;
+    event.preventDefault();
+    await applyFiltersFromSource("mobile");
+    setMobileFiltersOpen(false);
+  });
+  mobileBottomNav?.addEventListener("click", async (event) => {
+    const trigger = event.target.closest("[data-mobile-bottom-value]");
+    if (!trigger) return;
+    const actionType = String(trigger.dataset.mobileBottomType || "");
+    const actionValue = String(trigger.dataset.mobileBottomValue || "");
+    if (actionType === "route") {
+      setMobileSheetState("");
+      closeSearchArea();
+      if (actionValue === "/conversations") {
+        state.mobileNavContext = {
+          ...state.mobileNavContext,
+          path: "/conversations",
+          view: "messages"
+        };
+        try {
+          if (location.pathname !== "/conversations") {
+            history.pushState({ path: "/conversations" }, "", "/conversations");
+          }
+        } catch (_error) {}
+        await loadMessages();
+        showView("messages");
+        renderMobileBottomNav();
+        return;
+      }
+      if (typeof window.navigateTo === "function") {
+        await window.navigateTo(actionValue);
+        return;
+      }
+      if (actionValue === "/") {
+        showView("home");
+        return;
+      }
+      if (actionValue === "/auth") {
+        showView("auth");
+        return;
+      }
+      if (actionValue === "/favorites") {
+        await loadFavorites();
+        showView("favorites");
+        return;
+      }
+      if (actionValue === "/cart") {
+        await loadCart();
+        showView("cart");
+        return;
+      }
+      if (actionValue === "/dashboard") {
+        await loadDashboard();
+        showView("dashboard");
+        return;
+      }
+      if (actionValue === "/profile") {
+        fillProfileFormFromUser();
+        showView("profile");
+        return;
+      }
+    }
+    await handleMobileNavigationAction(actionValue);
+  });
 
   document.getElementById("sortSelect")?.addEventListener("change", function () {
     const sortValue = this.value;
@@ -4597,14 +5182,18 @@ function bindStaticEvents() {
 
   document.addEventListener("click", (event) => {
     if (!state.mobileConversationsOpen || !mobileConversationPicker) return;
-    if (!mobileConversationPicker.contains(event.target)) {
+    const clickedConversationTrigger = event.target.closest("#conversationDropdownTriggerBtn");
+    const clickedChatMenuConversationAction = event.target.closest('[data-chat-menu-action="conversations"]');
+    if (!mobileConversationPicker.contains(event.target) && !clickedConversationTrigger && !clickedChatMenuConversationAction) {
       setMobileConversationPickerOpen(false);
     }
   });
 
   document.addEventListener("click", (event) => {
-    if (!state.mobileHeaderMenuOpen || !mobileHeaderMenu) return;
-    if (!mobileHeaderMenu.contains(event.target)) {
+    if (!state.mobileHeaderMenuOpen) return;
+    const clickedInsideMenuTrigger = mobileHeaderMenu?.contains(event.target);
+    const clickedInsideMenuSheet = mobileHeaderSheet?.contains(event.target);
+    if (!clickedInsideMenuTrigger && !clickedInsideMenuSheet) {
       setMobileHeaderMenuOpen(false);
     }
   });
@@ -4626,8 +5215,12 @@ function bindStaticEvents() {
   });
 
   closeReportModal?.addEventListener("click", () => closeModal(reportModal));
+  closeConversationOrderSheetBtn?.addEventListener("click", () => closeModal(conversationOrderSheetModal));
   reportModal?.addEventListener("click", (e) => {
     if (e.target === reportModal) closeModal(reportModal);
+  });
+  conversationOrderSheetModal?.addEventListener("click", (e) => {
+    if (e.target === conversationOrderSheetModal) closeModal(conversationOrderSheetModal);
   });
 
   loginForm?.addEventListener("submit", handleLoginSubmit);
@@ -4685,6 +5278,15 @@ function bindStaticEvents() {
       event.preventDefault();
       openSiteContent(link.dataset.contentKey);
     });
+  });
+
+  syncTopbarScrollState();
+  window.addEventListener("scroll", syncTopbarScrollState, { passive: true });
+  window.addEventListener("resize", () => {
+    syncTopbarScrollState();
+    if (window.innerWidth > 620) setMobileSheetState("");
+    syncIsolatedMessagesMode();
+    renderMobileBottomNav();
   });
 }
 
@@ -4819,10 +5421,22 @@ async function loadMessages() {
   try {
     const data = await api("/api/conversations");
     state.conversations = data.conversations || [];
-    renderConversationsList(state.conversations, state.activeConversationId);
-    if (state.selectedConversationId) {
-      await openConversation(state.selectedConversationId);
+    refreshNavBadges();
+
+    const fallbackConversationId = Number(
+      state.selectedConversationId
+      || state.activeConversation?.id
+      || state.conversations[0]?.id
+      || 0
+    );
+
+    renderConversationsList(state.conversations, fallbackConversationId || null);
+
+    if (fallbackConversationId) {
+      await openConversation(fallbackConversationId);
     } else {
+      state.selectedConversationId = null;
+      state.activeConversation = null;
       renderConversationDetails(null);
     }
   } catch (error) {
@@ -5262,7 +5876,7 @@ function renderConversationsList(conversations, activeConversationId = null) {
       item.addEventListener("click", async (event) => {
         const conversationId = Number(item.dataset.openConversation);
         setMobileConversationPickerOpen(false);
-        if (typeof window.navigateTo === "function") {
+        if (typeof window.navigateTo === "function" && window.innerWidth > 900) {
           event.preventDefault();
           await window.navigateTo(`/conversation/${conversationId}`);
           return;
@@ -5696,42 +6310,63 @@ function renderConversationDetails(conversation) {
   const counterparty = state.user?.id === conversation.sellerId
     ? (conversation.buyer?.fullName || "مشتري")
     : (conversation.seller?.storeName || conversation.seller?.fullName || "متجر");
-  const linkedOrders = Array.isArray(conversation.linkedOrders) ? conversation.linkedOrders : [];
+  const hasOrderDetails = Boolean(getPrimaryLinkedOrder(conversation) || conversation.product?.id);
+  const presenceLabel = getConversationPresenceLabel(conversation);
+  const linkedOrder = getPrimaryLinkedOrder(conversation);
+  const product = conversation?.product || {};
+  const sellerId = Number(conversation?.sellerId || conversation?.seller?.id || 0);
+  const avatarToken = getConversationAvatarToken(conversation, counterparty);
+  const productTitle = escapeHtml(product.name || "منتج مرتبط");
+  const productPrice = escapeHtml(
+    linkedOrder
+      ? formatPrice(linkedOrder.totalAmount || product.price || 0, product.currency || "ل.س")
+      : formatPrice(product.price || 0, product.currency || "ل.س")
+  );
+  const contextStatus = escapeHtml(
+    linkedOrder ? formatOrderStatus(linkedOrder.status) : formatConversationStatus(conversation?.status || "")
+  );
+  const contextImage = product.image
+    ? `<img class="chat-order-context-thumb" src="${escapeHtml(product.image)}" alt="${productTitle}" />`
+    : `<div class="chat-order-context-thumb chat-order-context-thumb-fallback" aria-hidden="true">🛍</div>`;
 
   conversationDetails.innerHTML = `
     <div class="chat-layout whatsapp-chat-layout">
       <div class="chat-header whatsapp-chat-header">
-        <div class="chat-person-block">
-          <div class="chat-person-avatar">${escapeHtml((counterparty || "م")[0] || "م")}</div>
-          <div>
-            <h3>${escapeHtml(counterparty)}</h3>
-            <div class="muted">المنتج: ${escapeHtml(conversation.product?.name || "")}</div>
+        <div class="chat-header-leading">
+          <button class="chat-icon-btn chat-back-btn" id="conversationBackBtn" type="button" aria-label="رجوع">→</button>
+          <div class="chat-avatar-wrap">
+            <div class="chat-avatar-badge">${escapeHtml(avatarToken)}</div>
+            <span class="chat-avatar-status-dot" aria-hidden="true"></span>
           </div>
-        </div>
-        <div class="chat-header-meta">
-          <span class="chat-chip">${escapeHtml(formatConversationType(conversation.conversationType))}</span>
-          <span class="chat-chip">الحالة: ${escapeHtml(formatConversationStatus(conversation.status || ""))}</span>
-          <span class="chat-chip light">${escapeHtml(conversation.seller?.storeName || conversation.seller?.fullName || "")}</span>
+          <div class="chat-person-block">
+            <div class="chat-header-title-block">
+              <h3>${escapeHtml(counterparty)}</h3>
+              <div class="chat-presence">${escapeHtml(presenceLabel)}</div>
+            </div>
+          </div>
+          <details class="chat-header-menu-wrap" id="conversationActionsMenuDetails">
+            <summary class="chat-icon-btn chat-menu-trigger" aria-label="خيارات المحادثة">⋮</summary>
+            <div class="chat-header-menu">
+              ${sellerId ? `<button class="chat-header-menu-item" data-chat-menu-action="seller" type="button"><span>🏪</span><span>زيارة المتجر</span></button>` : ""}
+              <button class="chat-header-menu-item" data-chat-menu-action="conversations" type="button"><span>📋</span><span>المحادثات الأخرى</span></button>
+            </div>
+          </details>
         </div>
       </div>
 
-      ${linkedOrders.length ? `
-        <div class="deal-strip">
-          ${linkedOrders.map((order) => `
-            <div class="compact-card linked-orders-card chat-linked-order">
-              <div class="deal-head">
-                <div class="linked-order-summary">
-                  <strong>طلب شراء #${order.id}</strong>
-                  <div class="muted">عدد العناصر: ${order.itemsCount || 0} - الإجمالي: ${formatPrice(order.totalAmount || 0, conversation.product?.currency || "ل.س")}</div>
-                </div>
-                <span class="deal-status ${getOrderStatusTone(order.status)}">${escapeHtml(formatOrderStatus(order.status))}</span>
-              </div>
-              <div class="deal-actions">
-                <button class="btn btn-light" data-open-linked-order="${order.id}" type="button">عرض الطلب</button>
-              </div>
-            </div>
-          `).join("")}
-        </div>
+      ${hasOrderDetails ? `
+        <button class="chat-order-context-bar" id="conversationOrderContextBtn" type="button">
+          ${contextImage}
+          <div class="chat-order-context-copy">
+            <span class="chat-order-context-title">${productTitle}</span>
+            <span class="chat-order-context-subline">
+              <strong>${productPrice}</strong>
+              <span class="chat-order-context-dot">•</span>
+              <span>${contextStatus || "بدون حالة"}</span>
+            </span>
+          </div>
+          <span class="chat-order-context-cta">تفاصيل</span>
+        </button>
       ` : ""}
 
       <div class="chat-thread whatsapp-thread" id="activeChatThread">
@@ -5741,8 +6376,10 @@ function renderConversationDetails(conversation) {
       ${canReply ? `
         <div class="chat-composer whatsapp-composer">
           <div class="chat-input-shell whatsapp-input-shell">
-            <input class="field chat-textarea whatsapp-textarea chat-singleline-input" id="conversationMessageInput" type="text" placeholder="اكتب رسالتك" />
-            <button class="btn btn-secondary chat-send-inline-btn" id="sendConversationMessageBtn" type="button">إرسال</button>
+            <div class="chat-input-box">
+              <input class="field chat-textarea whatsapp-textarea chat-singleline-input" id="conversationMessageInput" type="text" placeholder="اكتب رسالة..." />
+            </div>
+            <button class="chat-send-inline-btn is-send" id="sendConversationMessageBtn" type="button" aria-label="إرسال">➤</button>
           </div>
         </div>
       ` : ""}
@@ -5771,23 +6408,53 @@ function renderConversationDetails(conversation) {
   };
 
   document.getElementById("sendConversationMessageBtn")?.addEventListener("click", sendConversationMessage);
-  document.getElementById("conversationMessageInput")?.addEventListener("keydown", async (event) => {
+  const messageInput = document.getElementById("conversationMessageInput");
+  messageInput?.addEventListener("keydown", async (event) => {
     if (event.key !== "Enter" || event.shiftKey) return;
     event.preventDefault();
     await sendConversationMessage();
   });
 
-  conversationDetails.querySelectorAll("[data-open-linked-order]").forEach((btn) => {
-    btn.addEventListener("click", async () => {
-      if (typeof window.navigateTo === "function") {
-        await window.navigateTo(`/order/${Number(btn.dataset.openLinkedOrder)}`);
+  document.getElementById("conversationBackBtn")?.addEventListener("click", async () => {
+    await handleConversationBackNavigation();
+  });
+
+  document.getElementById("conversationOrderContextBtn")?.addEventListener("click", () => openConversationOrderSheet(conversation));
+
+  const actionMenuDetails = document.getElementById("conversationActionsMenuDetails");
+  actionMenuDetails?.querySelectorAll("[data-chat-menu-action]").forEach((item) => {
+    item.addEventListener("click", async (event) => {
+      const action = item.dataset.chatMenuAction;
+      actionMenuDetails.removeAttribute("open");
+
+      if (action === "seller") {
+        if (!sellerId) return;
+        if (typeof window.navigateTo === "function") {
+          await window.navigateTo(`/seller/${sellerId}`);
+          return;
+        }
+        await openSellerPage(sellerId);
         return;
       }
-      showView("orders");
-      await loadOrders();
-      await loadOrderDetails(Number(btn.dataset.openLinkedOrder));
+
+      if (action === "conversations") {
+        event.stopPropagation();
+        if (state.mobileConversationsOpen) {
+          setMobileConversationPickerOpen(false);
+          return;
+        }
+        await openActiveConversationsList();
+      }
     });
   });
+
+  const sendButton = document.getElementById("sendConversationMessageBtn");
+  if (sendButton) {
+    sendButton.textContent = "➤";
+    sendButton.setAttribute("aria-label", "إرسال");
+    sendButton.classList.add("is-send");
+    sendButton.classList.remove("is-mic");
+  }
 
   const thread = document.getElementById("activeChatThread");
   if (thread) {

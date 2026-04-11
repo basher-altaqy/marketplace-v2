@@ -21,7 +21,6 @@
         <nav class="header-nav-links" aria-label="التنقل الرئيسي">
           <a class="header-nav-link is-active" href="/" data-route="/">الرئيسية</a>
           <button class="header-nav-link" type="button" data-home-scroll="filtersSection">المنتجات</button>
-          <button class="header-nav-link" type="button" data-home-scroll="benefitsSection">لماذا نحن</button>
         </nav>
 
         <div class="nav-actions header-nav-row">
@@ -29,16 +28,12 @@
             <button class="btn btn-light mobile-header-menu-toggle" id="mobileHeaderMenuToggle" type="button" aria-expanded="false" aria-label="فتح القائمة" title="فتح القائمة">
               <span aria-hidden="true">☰</span>
             </button>
-            <div class="mobile-header-dropdown hidden" id="mobileHeaderDropdown"></div>
-          </div>
-          <button class="btn btn-light header-icon-btn search-toggle-btn" id="navSearchToggleBtn" type="button" aria-label="فتح البحث" title="فتح البحث">
-            <span aria-hidden="true">⌕</span>
-            <span>بحث</span>
-          </button>
+          <div class="mobile-header-dropdown hidden" id="mobileHeaderDropdown"></div>
+        </div>
           <button class="btn btn-outline" id="navLoginBtn">تسجيل الدخول</button>
           <button class="btn btn-primary" id="navAddProductBtn">إضافة منتج</button>
           <button class="btn btn-light hidden" id="navProfileBtn">الملف الشخصي</button>
-          <button class="btn btn-light hidden" id="navMessagesBtn">المحادثات<span id="navMessagesBadge" class="cart-badge hidden">0</span></button>
+          <button class="btn btn-light hidden" id="navMessagesBtn">محادثات<span id="navMessagesBadge" class="cart-badge hidden">0</span></button>
           <button class="btn btn-light hidden" id="navNotificationsBtn">التنبيهات<span id="navNotificationsBadge" class="cart-badge hidden">0</span></button>
           <button class="btn btn-light hidden" id="navFavoritesBtn">المفضلة<span id="navFavoritesBadge" class="cart-badge hidden">0</span></button>
           <button class="btn btn-light hidden cart-nav-btn" id="navCartBtn">السلة<span id="navCartBadge" class="cart-badge hidden">0</span></button>
@@ -119,6 +114,26 @@
 
         <section class="section" id="filtersSection">
           <div class="filters-shell">
+            <div class="mobile-filters-toolbar" id="mobileFiltersToolbar">
+              <div class="mobile-filters-summary">
+                <span class="mobile-filters-summary-label">النتائج</span>
+                <strong id="mobileFiltersResultsCount">0 منتج</strong>
+              </div>
+              <div class="mobile-filters-toolbar-actions">
+                <label class="mobile-sort-field" for="mobileSortBy">
+                  <span class="mobile-sort-label">الترتيب</span>
+                  <select id="mobileSortBy" class="field">
+                    <option value="newest">الأحدث</option>
+                    <option value="priceAsc">السعر تصاعدي</option>
+                    <option value="priceDesc">السعر تنازلي</option>
+                    <option value="views">الأكثر مشاهدة</option>
+                  </select>
+                </label>
+                <button class="btn btn-outline mobile-filters-sheet-toggle" id="mobileFiltersOpenBtn" type="button" aria-expanded="false" aria-controls="mobileFiltersSheet">
+                  الفلاتر
+                </button>
+              </div>
+            </div>
             <div class="filters-bar">
               <input class="field" id="filterKeyword" placeholder="كلمة مفتاحية" />
               <select id="filterCategory" class="field"></select>
@@ -441,7 +456,7 @@
           <aside class="messages-sidebar card conversations-card">
             <div class="section-head messages-head">
               <div>
-                <h3>المحادثات</h3>
+                <h3>محادثات</h3>
                 <p class="muted">قائمة جانبية سريعة على نمط أكثر قربًا من تطبيقات الدردشة</p>
               </div>
               <button class="btn btn-light" id="refreshConversationsBtn" type="button">
@@ -484,7 +499,7 @@
           <div class="footer-title">التصفح</div>
           <a href="#home">الرئيسية</a><br />
           <a href="#catalog">المنتجات</a><br />
-          <a href="#messages">المحادثات</a>
+          <a href="#messages">محادثات</a>
         </div>
         <div>
           <div class="footer-title">الحساب</div>
@@ -504,6 +519,78 @@
         <span id="footerYearText">© 2026 بضاعة بلدي. جميع الحقوق محفوظة.</span>
       </div>
     </footer>
+    <nav class="mobile-bottom-nav" id="mobileBottomNav" aria-label="التنقل السفلي للجوال"></nav>
+  </div>
+
+  <div class="mobile-sheet-backdrop hidden" id="mobileSheetBackdrop" aria-hidden="true"></div>
+
+  <section class="mobile-sheet mobile-header-sheet hidden" id="mobileHeaderSheet" aria-hidden="true" aria-label="القائمة الرئيسية">
+    <div class="mobile-sheet-handle" aria-hidden="true"></div>
+    <div class="mobile-sheet-head">
+      <div>
+        <div class="mobile-sheet-kicker">التنقل</div>
+        <h3>القائمة الرئيسية</h3>
+      </div>
+      <button class="mobile-sheet-close" id="mobileHeaderSheetCloseBtn" type="button" aria-label="إغلاق القائمة">×</button>
+    </div>
+    <div class="mobile-sheet-body">
+      <div class="mobile-sheet-menu" id="mobileHeaderSheetMenu"></div>
+    </div>
+  </section>
+
+  <section class="mobile-sheet mobile-filters-sheet hidden" id="mobileFiltersSheet" aria-hidden="true" aria-label="فلاتر الجوال">
+    <div class="mobile-sheet-handle" aria-hidden="true"></div>
+    <div class="mobile-sheet-head">
+      <div>
+        <div class="mobile-sheet-kicker">تصفية وفرز</div>
+        <h3>خيارات المنتجات</h3>
+      </div>
+      <button class="mobile-sheet-close" id="mobileFiltersCloseBtn" type="button" aria-label="إغلاق الفلاتر">×</button>
+    </div>
+    <div class="mobile-sheet-body">
+      <div class="mobile-filters-sheet-grid">
+        <label class="mobile-sheet-field" for="mobileFilterKeyword">
+          <span>كلمة مفتاحية</span>
+          <input class="field" id="mobileFilterKeyword" placeholder="ابحث عن منتج أو تصنيف" />
+        </label>
+        <label class="mobile-sheet-field" for="mobileFilterCategory">
+          <span>التصنيف</span>
+          <select id="mobileFilterCategory" class="field"></select>
+        </label>
+        <label class="mobile-sheet-field" for="mobileFilterRegion">
+          <span>المنطقة</span>
+          <select id="mobileFilterRegion" class="field"></select>
+        </label>
+        <label class="mobile-sheet-field" for="mobileSheetSortBy">
+          <span>الترتيب</span>
+          <select id="mobileSheetSortBy" class="field">
+            <option value="newest">الأحدث</option>
+            <option value="priceAsc">السعر تصاعدي</option>
+            <option value="priceDesc">السعر تنازلي</option>
+            <option value="views">الأكثر مشاهدة</option>
+          </select>
+        </label>
+      </div>
+      <div class="mobile-sheet-actions">
+        <button class="btn btn-light" id="mobileFiltersResetBtn" type="button">إعادة الضبط</button>
+        <button class="btn btn-primary" id="mobileFiltersApplyBtn" type="button">تطبيق الفلاتر</button>
+      </div>
+      <div class="mobile-sheet-chips chips chips-persistent" id="mobileCategoryChips"></div>
+    </div>
+  </section>
+
+  <div class="modal chat-order-sheet-modal" id="conversationOrderSheetModal">
+    <div class="modal-content chat-order-sheet">
+      <div class="chat-order-sheet-handle" aria-hidden="true"></div>
+      <div class="chat-order-sheet-head">
+        <div>
+          <div class="chat-order-sheet-kicker">تفاصيل الطلب</div>
+          <h3>ملخص المنتج والطلب</h3>
+        </div>
+        <button class="icon-btn chat-order-sheet-close" id="closeConversationOrderSheetBtn" type="button" aria-label="إغلاق التفاصيل">×</button>
+      </div>
+      <div id="conversationOrderSheetContent" class="chat-order-sheet-body"></div>
+    </div>
   </div>
 
   <div class="modal" id="productModal">
