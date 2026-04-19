@@ -62,10 +62,10 @@
           <p>اكتب اسم المنتج أو التصنيف أو نوع البضاعة وسننقلك مباشرة إلى نتائج الصفحة الرئيسية.</p>
         </div>
         <form class="search-overlay-form" id="globalSearchForm">
-          <label class="search-overlay-field" for="globalSearchInput">
+          <label class="search-overlay-field" for="globalSearchInputOverlay">
             <span class="search-overlay-icon" aria-hidden="true">⌕</span>
             <input
-              id="globalSearchInput"
+              id="globalSearchInputOverlay"
               class="search-overlay-input"
               type="search"
               placeholder="ابحث عن حلويات، أعمال يدوية، منتجات منزلية، هدايا..."
@@ -129,6 +129,21 @@
             </article>
           </div>
         </section>
+
+        <div class="google-search-wrapper">
+          <div class="search-container">
+            <div class="rainbow-border"></div>
+            <div class="search-box">
+              <span class="search-icon">🔍</span>
+              <input
+                type="text"
+                class="search-input"
+                placeholder="ابحث في بضاعة بلدي"
+                id="globalSearchInput"
+              />
+            </div>
+          </div>
+        </div>
 
         <section class="section" id="filtersSection">
           <div class="filters-shell">

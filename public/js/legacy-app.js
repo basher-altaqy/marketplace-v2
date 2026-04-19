@@ -398,6 +398,7 @@ const sortBy = document.getElementById("sortBy");
 
 const globalSearchForm = document.getElementById("globalSearchForm");
 const globalSearchInput = document.getElementById("globalSearchInput");
+const globalSearchInputOverlay = document.getElementById("globalSearchInputOverlay");
 const searchArea = document.getElementById("searchArea");
 const searchQuickActions = document.querySelector(".search-quick-actions");
 const navSearchToggleBtn = document.getElementById("navSearchToggleBtn");
@@ -847,7 +848,7 @@ function openSearchArea() {
   document.body.classList.add("search-area-open");
   document.querySelector(".topbar")?.classList.remove("topbar-mobile-hidden");
   renderMobileBottomNav();
-  window.setTimeout(() => globalSearchInput?.focus(), 80);
+  window.setTimeout(() => (globalSearchInputOverlay || globalSearchInput)?.focus(), 80);
 }
 
 function closeSearchArea() {
@@ -1426,26 +1427,43 @@ async function loadFavorites() {
 async function toggleFavorite(productId) {
   if (!ensureBuyerAccess()) return;
 
+  const normalizedId = Number(productId);
+  const setFavoriteButtonsState = (isActive) => {
+    document.querySelectorAll(`[data-toggle-favorite="${normalizedId}"]`).forEach((btn) => {
+      btn.classList.toggle("is-active-favorite", isActive);
+      const nextLabel = isActive ? "إزالة من المفضلة" : "إضافة إلى المفضلة";
+      btn.setAttribute("aria-label", nextLabel);
+      btn.setAttribute("title", nextLabel);
+      const iconNode = btn.querySelector("span");
+      if (iconNode) iconNode.textContent = isActive ? "♥" : "♡";
+    });
+  };
+
   try {
-    if (isFavoriteProduct(productId)) {
-      await api(`/api/favorites/${Number(productId)}`, { method: "DELETE" });
-      state.favoriteProductIds = state.favoriteProductIds.filter((id) => id !== Number(productId));
-      state.favorites = state.favorites.filter((item) => item.id !== Number(productId));
+    const wasFavorite = isFavoriteProduct(normalizedId);
+
+    if (wasFavorite) {
+      await api(`/api/favorites/${normalizedId}`, { method: "DELETE" });
+      state.favoriteProductIds = state.favoriteProductIds.filter((id) => id !== normalizedId);
+      state.favorites = state.favorites.filter((item) => item.id !== normalizedId);
+      setFavoriteButtonsState(false);
       showToast("تمت إزالة المنتج من المفضلة");
     } else {
       await api("/api/favorites", {
         method: "POST",
-        body: JSON.stringify({ productId: Number(productId) })
+        body: JSON.stringify({ productId: normalizedId })
       });
+      if (!state.favoriteProductIds.includes(normalizedId)) {
+        state.favoriteProductIds = [...state.favoriteProductIds, normalizedId];
+      }
+      setFavoriteButtonsState(true);
       showToast("تمت إضافة المنتج إلى المفضلة");
     }
 
-    await loadFavorites();
-    renderHomeSections();
-    renderCatalogProducts(state.currentCatalogProducts.length ? state.currentCatalogProducts : state.filteredProducts);
-    if (state.currentSellerProducts.length && sellerProductsGrid) {
-      sellerProductsGrid.innerHTML = state.currentSellerProducts.map(productCardHtml).join("");
-      bindProductActions(sellerProductsGrid);
+    refreshNavBadges();
+
+    if (favoritesView && !favoritesView.classList.contains("hidden")) {
+      await loadFavorites();
     }
   } catch (error) {
     showToast(error.message);
@@ -1572,6 +1590,20 @@ async function loadOrders() {
   if (!currentVisibleOrder) {
     await loadOrderDetails(filteredOrders[0].id);
   }
+}
+
+function focusSellerRegistrationFlow() {
+  const registerRole = document.getElementById("registerRole");
+  if (registerRole) {
+    registerRole.value = "seller";
+    registerRole.dispatchEvent(new Event("change", { bubbles: true }));
+  }
+
+  syncRoleSpecificFields();
+
+  const registerCard = registerRole?.closest(".card");
+  registerCard?.scrollIntoView({ behavior: "smooth", block: "center" });
+  document.getElementById("registerFullName")?.focus();
 }
 
 async function loadOrderDetails(orderId) {
@@ -2064,9 +2096,6 @@ function productCardHtml(product) {
           <button class="product-hover-action product-hover-action-favorite ${favoriteActive ? "is-active-favorite" : ""}" data-toggle-favorite="${product.id}" type="button" aria-label="${favoriteLabel}" title="${favoriteLabel}">
             <span aria-hidden="true">${favoriteActive ? "♥" : "♡"}</span>
           </button>
-          <button class="product-hover-action product-hover-action-cart" data-add-cart="${product.id}" type="button" aria-label="أضف إلى السلة" title="أضف إلى السلة">
-            <span aria-hidden="true">🛒</span>
-          </button>
         </div>
       </div>
       <div class="product-body product-body-pro">
@@ -2190,14 +2219,6 @@ function getOrderProgressSteps(status) {
 }
 
 function bindProductActions(scope = document) {
-  const isTouchLikeViewport = window.matchMedia("(hover: none), (pointer: coarse)").matches;
-
-  if (isTouchLikeViewport) {
-    scope.querySelectorAll(".product-card.product-card-refined").forEach((card) => {
-      card.classList.remove("is-mobile-actions-visible");
-    });
-  }
-
   scope.querySelectorAll("[data-open-product-card]").forEach((card) => {
     if (card.dataset.cardOpenBound === "true") return;
     card.dataset.cardOpenBound = "true";
@@ -2215,13 +2236,6 @@ function bindProductActions(scope = document) {
     card.addEventListener("click", async (event) => {
       const interactiveTarget = event.target.closest("button, a, input, select, textarea, label");
       if (interactiveTarget) return;
-      if (isTouchLikeViewport && !card.classList.contains("is-mobile-actions-visible")) {
-        document.querySelectorAll(".product-card.product-card-refined.is-mobile-actions-visible").forEach((otherCard) => {
-          if (otherCard !== card) otherCard.classList.remove("is-mobile-actions-visible");
-        });
-        card.classList.add("is-mobile-actions-visible");
-        return;
-      }
       await openCardProduct();
     });
 
@@ -2276,7 +2290,9 @@ function bindProductActions(scope = document) {
   });
 
   scope.querySelectorAll("[data-toggle-favorite]").forEach((btn) => {
-    btn.addEventListener("click", async () => {
+    btn.addEventListener("click", async (event) => {
+      event.preventDefault();
+      event.stopPropagation();
       await toggleFavorite(Number(btn.dataset.toggleFavorite));
     });
   });
@@ -5256,8 +5272,8 @@ function managedProductCardHtml(product) {
       </div>
       <div class="nav-actions managed-product-actions managed-product-actions-mini">
         ${actions.map((action) => action.type === "open"
-          ? `<button class="managed-action-icon ${action.className}" type="button" data-dashboard-open-product="${product.id}" aria-label="${escapeHtml(action.label)}" title="${escapeHtml(action.label)}">${action.icon}</button>`
-          : `<button class="managed-action-icon ${action.className}" type="button" data-my-product-status="${product.id}" data-next="${escapeHtml(action.next)}" aria-label="${escapeHtml(action.label)}" title="${escapeHtml(action.label)}">${action.icon}</button>`
+          ? `<button class="managed-action-icon ${action.className}" type="button" data-dashboard-open-product="${product.id}" aria-label="${escapeHtml(action.label)}" title="${escapeHtml(action.label)}"><span class="managed-action-glyph" aria-hidden="true">${action.icon}</span><span class="managed-action-label">${escapeHtml(action.label)}</span></button>`
+          : `<button class="managed-action-icon ${action.className}" type="button" data-my-product-status="${product.id}" data-next="${escapeHtml(action.next)}" aria-label="${escapeHtml(action.label)}" title="${escapeHtml(action.label)}"><span class="managed-action-glyph" aria-hidden="true">${action.icon}</span><span class="managed-action-label">${escapeHtml(action.label)}</span></button>`
         ).join("")}
       </div>
     </article>
@@ -5323,8 +5339,10 @@ function bindStaticEvents() {
 
   globalSearchForm?.addEventListener("submit", async (e) => {
     e.preventDefault();
-    state.search = globalSearchInput?.value?.trim() || "";
+    const typedQuery = globalSearchInputOverlay?.value?.trim() || globalSearchInput?.value?.trim() || "";
+    state.search = typedQuery;
     if (filterKeyword) filterKeyword.value = state.search;
+    if (globalSearchInput) globalSearchInput.value = state.search;
     syncMobileFilterControls();
     await loadProducts();
     showView("home");
@@ -5355,6 +5373,7 @@ function bindStaticEvents() {
 
     state.search = shortcutValue;
     if (globalSearchInput) globalSearchInput.value = shortcutValue;
+    if (globalSearchInputOverlay) globalSearchInputOverlay.value = shortcutValue;
     if (filterKeyword) filterKeyword.value = shortcutValue;
     syncMobileFilterControls();
     await loadProducts();
@@ -5630,12 +5649,16 @@ function bindStaticEvents() {
       return;
     }
 
+    showToast("لبدء البيع، يجب إنشاء حساب تاجر (بائع) أولاً.");
+
     if (typeof window.navigateTo === "function") {
       await window.navigateTo("/auth");
+      window.setTimeout(focusSellerRegistrationFlow, 90);
       return;
     }
 
     showView("auth");
+    window.setTimeout(focusSellerRegistrationFlow, 50);
   });
 
   document.getElementById("openAddProductFromDashboard")?.addEventListener("click", () => {
@@ -5792,6 +5815,7 @@ function bindStaticEvents() {
 
   loginForm?.addEventListener("submit", handleLoginSubmit);
   registerForm?.addEventListener("submit", handleRegisterSubmit);
+  document.getElementById("registerRole")?.addEventListener("change", syncRoleSpecificFields);
   profileForm?.addEventListener("submit", handleProfileSubmit);
   avatarForm?.addEventListener("submit", handleAvatarSubmit);
   addProductForm?.addEventListener("submit", handleAddProductSubmit);
