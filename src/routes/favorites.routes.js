@@ -3,7 +3,7 @@ const router = express.Router();
 const {
   authRequired,
   query,
-  mapProductRow
+  mapProductRows
 } = require('../services/marketplace.service');
 
 router.get('/api/favorites', authRequired, async (req, res, next) => {
@@ -30,7 +30,7 @@ router.get('/api/favorites', authRequired, async (req, res, next) => {
       [req.user.id]
     );
 
-    const favorites = await Promise.all(result.rows.map(mapProductRow));
+    const favorites = await mapProductRows(result.rows);
     res.json({ favorites });
   } catch (error) {
     next(error);

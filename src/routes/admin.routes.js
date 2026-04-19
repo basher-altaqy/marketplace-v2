@@ -4,7 +4,7 @@ const {
   publicUser,
   query,
   logAudit,
-  mapProductRow,
+  mapProductRows,
   getProductById,
   refreshSellerStats
 } = require('../services/marketplace.service');
@@ -110,7 +110,7 @@ router.get('/api/admin/products', adminAuthRequired, async (_req, res, next) => 
        ORDER BY p.created_at DESC`
     );
 
-    const products = await Promise.all(result.rows.map(mapProductRow));
+    const products = await mapProductRows(result.rows);
     res.json({ products });
   } catch (error) {
     next(error);
@@ -224,7 +224,7 @@ router.get('/api/admin/users/:id', adminAuthRequired, async (req, res, next) => 
       [userId]
     );
 
-    const recentProducts = await Promise.all(recentProductsResult.rows.map(mapProductRow));
+    const recentProducts = await mapProductRows(recentProductsResult.rows);
 
     res.json({
       user: {

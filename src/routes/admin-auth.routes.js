@@ -6,6 +6,7 @@ const router = express.Router();
 const { query, publicUser, normalizePhone } = require('../services/marketplace.service');
 const { JWT_SECRET } = require('../config/env');
 const { logSystemEvent } = require('../services/platform.service');
+const { enforceAbuseLimit } = require('../services/security.service');
 
 function signAdminToken(user) {
   return jwt.sign(
@@ -63,6 +64,12 @@ router.post('/api/admin/auth/login', async (req, res, next) => {
     if (!identifier || !password) {
       await logSystemEvent('warning', 'auth_failure', 'admin login missing credentials', { identifier: String(identifier || '') });
       return res.status(400).json({ error: 'Identifier and password are required.' });
+    }
+
+    try {
+      await enforceAbuseLimit('admin_login', req.ip || req.headers['x-forwarded-for'] || identifier, 6, 1000 * 60 * 15);
+    } catch (limitError) {
+      return res.status(429).json({ error: limitError.message || 'Too many attempts. Try again later.' });
     }
 
     const result = await query(

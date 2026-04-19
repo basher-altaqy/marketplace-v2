@@ -247,7 +247,7 @@ function renderDashboardSpotlightProducts(products = []) {
       ${product.image ? `<img class="dashboard-spotlight-thumb" src="${escapeHtml(product.image)}" alt="${escapeHtml(product.name)}" loading="lazy">` : `<div class="dashboard-spotlight-thumb dashboard-spotlight-thumb-placeholder"></div>`}
       <div class="dashboard-spotlight-copy">
         <strong>${escapeHtml(product.name || "")}</strong>
-        <div class="muted">${formatPrice(product.price || 0, product.currency || "ل.س")}</div>
+        <div class="muted">${getProductPriceLabel(product)}</div>
       </div>
       <span class="dashboard-spotlight-badge">مشاهدات: ${Number(product.viewsCount || 0)}</span>
     </div>
@@ -593,6 +593,19 @@ function escapeHtml(value) {
 function formatPrice(price, currency) {
   const number = Number(price || 0);
   return `${new Intl.NumberFormat("en-US").format(number)} ${currency || ""}`.trim();
+}
+
+function isPriceOnRequestProduct(product) {
+  return Boolean(
+    product?.priceOnRequest
+    || product?.customFields?.price_on_request
+    || product?.customFields?.priceOnRequest
+  );
+}
+
+function getProductPriceLabel(product) {
+  if (isPriceOnRequestProduct(product)) return "تواصل للسعر";
+  return formatPrice(product?.price || 0, product?.currency || "ل.س");
 }
 
 
@@ -1279,6 +1292,14 @@ function normalizeProducts(products) {
     region: product.region || "",
     condition: product.condition || "",
     quantity: Number(product.quantity || 0),
+    customFields: product.customFields || product.custom_fields_json || {},
+    priceOnRequest: Boolean(
+      product.priceOnRequest
+      || product?.customFields?.price_on_request
+      || product?.customFields?.priceOnRequest
+      || product?.custom_fields_json?.price_on_request
+      || product?.custom_fields_json?.priceOnRequest
+    ),
     hasDeliveryService: Boolean(product.hasDeliveryService || product.has_delivery_service),
     viewsCount: Number(product.viewsCount || product.views || 0),
     image: product.image || (Array.isArray(product.images) ? product.images[0] : ""),
@@ -2051,7 +2072,7 @@ function productCardHtml(product) {
       <div class="product-body product-body-pro">
         <div class="product-title" title="${title}">${title}</div>
         <div class="product-price-row">
-          <div class="product-price product-price-inline product-price-hero">${formatPrice(product.price, product.currency)}</div>
+          <div class="product-price product-price-inline product-price-hero">${getProductPriceLabel(product)}</div>
         </div>
         <div class="product-meta-grid pro-meta-grid">
           <div class="product-meta-inline">
@@ -2420,15 +2441,12 @@ function renderRelatedProducts(product) {
 function renderProductView(product) {
   if (!productViewContent) return;
 
-  const stockQuantity = Number(product.quantity || 0);
-  const hasStockLimit = Number.isFinite(stockQuantity) && stockQuantity > 0;
   const canStartInquiry = state.user?.role === "buyer" && state.user.id !== product.seller.id;
   const canBuyDirect = !state.user || state.user.id !== product.seller.id;
   const productInfo = formatDetailRows([
     { label: "التصنيف", value: product.category },
     { label: "الموقع", value: product.region },
     { label: "الحالة", value: product.condition },
-    { label: "الكمية", value: hasStockLimit ? stockQuantity : "حسب الطلب" },
     { label: "المشاهدات", value: `${product.viewsCount || 0}` }
   ]);
   const sellerInfo = formatDetailRows([
@@ -2457,7 +2475,7 @@ function renderProductView(product) {
               <div class="product-page-kicker">${escapeHtml(product.category || "منتج")}</div>
               <h2>${escapeHtml(product.name)}</h2>
             </div>
-            <div class="product-price modal-price store-product-price">${formatPrice(product.price, product.currency)}</div>
+            <div class="product-price modal-price store-product-price">${getProductPriceLabel(product)}</div>
           </div>
 
           ${deliveryIndicatorHtml(product, "detail-delivery-pill")}
@@ -2478,7 +2496,6 @@ function renderProductView(product) {
                 <div class="detail-card-title">الشراء</div>
                 <div class="muted">يمكنك الإضافة إلى السلة أو تنفيذ شراء مباشر وفتح المحادثة فوراً.</div>
               </div>
-              <div class="modal-cart-stock">${hasStockLimit ? `المتوفر: ${stockQuantity}` : "الكمية حسب الطلب"}</div>
             </div>
             <div class="modal-cart-inline">
               <div class="modal-qty-stepper" aria-label="تحديد الكمية">
@@ -2585,15 +2602,12 @@ async function openProductModal(productId) {
     const data = await api(`/api/products/${productId}`);
     const product = normalizeProducts([data.product])[0];
     if (!productModalContent) return;
-    const stockQuantity = Number(product.quantity || 0);
-    const hasStockLimit = Number.isFinite(stockQuantity) && stockQuantity > 0;
     const canPurchaseProduct = !state.user || state.user.id !== product.seller.id;
 
     const productInfo = formatDetailRows([
       { label: "التصنيف", value: product.category },
       { label: "الموقع", value: product.region },
       { label: "الحالة", value: product.condition },
-      { label: "الكمية", value: product.quantity },
       { label: "المشاهدات", value: `${product.viewsCount}` }
     ]);
 
@@ -2617,7 +2631,7 @@ async function openProductModal(productId) {
         <div class="modal-product-copy">
           <div class="modal-title-row">
             <h2>${escapeHtml(product.name)}</h2>
-            <div class="product-price modal-price">${formatPrice(product.price, product.currency)}</div>
+            <div class="product-price modal-price">${getProductPriceLabel(product)}</div>
           </div>
 
           ${deliveryIndicatorHtml(product, "detail-delivery-pill")}
@@ -2633,7 +2647,6 @@ async function openProductModal(productId) {
                 <div class="detail-card-title">شراء المنتج</div>
                 <div class="muted">عند الشراء سيتم فتح محادثة مباشرة مع التاجر لمتابعة الطلب.</div>
               </div>
-              <div class="modal-cart-stock">${hasStockLimit ? `المتوفر: ${stockQuantity}` : "الكمية متاحة حسب الطلب"}</div>
             </div>
             <div class="modal-cart-inline">
               <div class="modal-qty-stepper" aria-label="تحديد الكمية">
@@ -3584,17 +3597,18 @@ async function handleAddProductSubmit(event) {
 
   try {
     const formData = new FormData();
+    const priceOnRequest = document.getElementById("pPriceOnRequest")?.checked === true;
     formData.append("name", document.getElementById("pName")?.value?.trim() || "");
     formData.append("description", document.getElementById("pDescription")?.value?.trim() || "");
-    formData.append("price", document.getElementById("pPrice")?.value || "0");
+    formData.append("price", priceOnRequest ? "0" : (document.getElementById("pPrice")?.value || "0"));
     formData.append("currency", document.getElementById("pCurrency")?.value || "ل.س");
     formData.append("category", document.getElementById("pCategory")?.value?.trim() || "");
     formData.append("region", document.getElementById("pRegion")?.value?.trim() || "");
     formData.append("condition", document.getElementById("pCondition")?.value || "جديد");
-    formData.append("quantity", document.getElementById("pQuantity")?.value || "1");
     formData.append("has_delivery_service", document.getElementById("pHasDeliveryService")?.checked ? "true" : "false");
     formData.append("tags", document.getElementById("pTags")?.value?.trim() || "");
     formData.append("status", document.getElementById("pStatus")?.value || "published");
+    formData.append("customFields", JSON.stringify({ price_on_request: priceOnRequest }));
 
     const files = document.getElementById("pImages")?.files || [];
     Array.from(files).slice(0, 5).forEach((file) => formData.append("images", file));
@@ -3607,6 +3621,7 @@ async function handleAddProductSubmit(event) {
     const newProduct = data?.product ? normalizeProducts([data.product])[0] : null;
     showToast("تمت إضافة المنتج");
     addProductForm?.reset();
+    syncPriceModeInProductForm();
     renderProductImagePreview();
     closeModal(productFormModal);
 
@@ -4412,7 +4427,7 @@ function renderConversationOrderSheet(conversation) {
   const productTitle = escapeHtml(product.name || "منتج مرتبط");
   const priceLabel = order
     ? formatPrice(order.totalAmount || product.price || 0, product.currency || "ل.س")
-    : formatPrice(product.price || 0, product.currency || "ل.س");
+    : getProductPriceLabel(product);
   const statusLabel = order
     ? formatOrderStatus(order.status)
     : formatConversationStatus(conversation?.status || "");
@@ -5197,8 +5212,6 @@ function managedProductCardHtml(product) {
     archived: "مؤرشف"
   };
   const statusLabel = statusLabelMap[product.status] || product.status || "-";
-  const stockQuantity = Number(product.quantity || 0);
-  const stockLabel = Number.isFinite(stockQuantity) && stockQuantity > 0 ? stockQuantity : "حسب الطلب";
   const actions = [
     { type: "open", icon: "↗", label: "عرض المنتج", className: "dashboard-icon-open" },
     {
@@ -5228,7 +5241,6 @@ function managedProductCardHtml(product) {
           </div>
           <div class="managed-product-meta-row">
             <span>SKU: #${product.id}</span>
-            <span>المخزون: ${stockLabel}</span>
             <span>المشاهدات: ${Number(product.viewsCount || 0).toLocaleString("ar")}</span>
           </div>
           <div class="managed-product-support-row">
@@ -5238,7 +5250,7 @@ function managedProductCardHtml(product) {
         </div>
         <div class="managed-product-side">
           <span class="managed-product-status-chip managed-product-status-${escapeHtml(product.status || "draft")}">${escapeHtml(statusLabel)}</span>
-          <div class="managed-product-price">${formatPrice(product.price, product.currency)}</div>
+          <div class="managed-product-price">${getProductPriceLabel(product)}</div>
           <span class="managed-product-side-note">${product.hasDeliveryService ? "توصيل متاح" : "بدون توصيل"}</span>
         </div>
       </div>
@@ -5252,7 +5264,56 @@ function managedProductCardHtml(product) {
   `;
 }
 
+function syncPriceModeInProductForm() {
+  const priceOnRequestInput = document.getElementById("pPriceOnRequest");
+  const priceInput = document.getElementById("pPrice");
+  if (!priceOnRequestInput || !priceInput) return;
+
+  if (priceOnRequestInput.checked) {
+    priceInput.value = "0";
+    priceInput.disabled = true;
+    priceInput.required = false;
+    priceInput.placeholder = "سيظهر: تواصل للسعر";
+    return;
+  }
+
+  priceInput.disabled = false;
+  priceInput.required = true;
+  priceInput.placeholder = "مثال: 325000";
+}
+
 function bindStaticEvents() {
+  const menuToggleBtn = document.getElementById("menuToggleBtn");
+  const dropdownMenu = document.getElementById("dropdownMenu");
+
+  menuToggleBtn?.addEventListener("click", (event) => {
+    event.preventDefault();
+    event.stopPropagation();
+    const expanded = menuToggleBtn.getAttribute("aria-expanded") === "true";
+    menuToggleBtn.setAttribute("aria-expanded", expanded ? "false" : "true");
+    dropdownMenu?.classList.toggle("show", !expanded);
+  });
+
+  dropdownMenu?.addEventListener("click", async (event) => {
+    const routeTarget = event.target.closest("[data-route]");
+    if (!routeTarget) return;
+    const path = String(routeTarget.dataset.route || "/");
+    dropdownMenu.classList.remove("show");
+    menuToggleBtn?.setAttribute("aria-expanded", "false");
+    if (typeof window.navigateTo === "function") {
+      await window.navigateTo(path);
+      return;
+    }
+    if (path === "/") showView("home");
+  });
+
+  document.addEventListener("click", (event) => {
+    if (!dropdownMenu || !menuToggleBtn) return;
+    if (menuToggleBtn.contains(event.target) || dropdownMenu.contains(event.target)) return;
+    dropdownMenu.classList.remove("show");
+    menuToggleBtn.setAttribute("aria-expanded", "false");
+  });
+
   document.getElementById("brandHomeLink")?.addEventListener("click", (e) => {
     e.preventDefault();
     showView("home");
@@ -5270,7 +5331,16 @@ function bindStaticEvents() {
     closeSearchArea();
   });
 
-  navSearchToggleBtn?.addEventListener("click", openSearchArea);
+  navSearchToggleBtn?.addEventListener("click", () => {
+    closeSearchArea();
+    const keywordField = document.getElementById("globalSearchInput");
+    if (keywordField) {
+      keywordField.focus();
+      keywordField.scrollIntoView({ behavior: "smooth", block: "center" });
+      return;
+    }
+    openSearchArea();
+  });
   mobileHeaderMenuToggle?.addEventListener("click", (event) => {
     event.stopPropagation();
     setMobileHeaderMenuOpen(!state.mobileHeaderMenuOpen);
@@ -5419,10 +5489,12 @@ function bindStaticEvents() {
   closeProductModal?.addEventListener("click", () => closeModal(productModal));
   closeProductFormModal?.addEventListener("click", () => {
     closeModal(productFormModal);
+    syncPriceModeInProductForm();
     renderProductImagePreview();
   });
   productFormCancelBtn?.addEventListener("click", () => {
     closeModal(productFormModal);
+    syncPriceModeInProductForm();
     renderProductImagePreview();
   });
   closeDeliveryInfoModal?.addEventListener("click", () => closeModal(deliveryInfoModal));
@@ -5438,9 +5510,13 @@ function bindStaticEvents() {
   productFormModal?.addEventListener("click", (e) => {
     if (e.target === productFormModal) {
       closeModal(productFormModal);
+      syncPriceModeInProductForm();
       renderProductImagePreview();
     }
   });
+
+  document.getElementById("pPriceOnRequest")?.addEventListener("change", syncPriceModeInProductForm);
+  syncPriceModeInProductForm();
 
   productImagesInput?.addEventListener("change", renderProductImagePreview);
   renderProductImagePreview();
@@ -6825,7 +6901,7 @@ function renderConversationDetails(conversation) {
   const productPrice = escapeHtml(
     linkedOrder
       ? formatPrice(linkedOrder.totalAmount || product.price || 0, product.currency || "ل.س")
-      : formatPrice(product.price || 0, product.currency || "ل.س")
+      : getProductPriceLabel(product)
   );
   const contextStatus = escapeHtml(
     linkedOrder ? formatOrderStatus(linkedOrder.status) : formatConversationStatus(conversation?.status || "")

@@ -1,4 +1,4 @@
-const jwt = require('jsonwebtoken');
+﻿const jwt = require('jsonwebtoken');
 const bcrypt = require('bcryptjs');
 const { query } = require('../db/pool');
 const { JWT_SECRET } = require('../config/env');
@@ -106,15 +106,7 @@ function roleRequired(...roles) {
   };
 }
 
-async function mapProductRow(row) {
-  if (!row) return null;
-
-  const imagesResult = await query(
-    `SELECT image_url FROM product_images WHERE product_id = $1 ORDER BY sort_order ASC, id ASC`,
-    [row.id]
-  );
-  const images = imagesResult.rows.map(item => item.image_url);
-
+function buildMappedProductRow(row, images = []) {
   return {
     id: row.id,
     sellerId: row.seller_id,
@@ -127,7 +119,7 @@ async function mapProductRow(row) {
     tags: Array.isArray(row.tags_json) ? row.tags_json : [],
     region: row.region,
     condition: row.item_condition,
-    quantity: row.quantity,
+    quantity: null,
     hasDeliveryService: Boolean(row.has_delivery_service),
     customFields: row.custom_fields_json || {},
     status: row.status,
@@ -151,6 +143,46 @@ async function mapProductRow(row) {
       totalProducts: row.seller_total_products ? Number(row.seller_total_products) : 0
     }
   };
+}
+
+async function mapProductRow(row) {
+  if (!row) return null;
+
+  const imagesResult = await query(
+    `SELECT image_url FROM product_images WHERE product_id = $1 ORDER BY sort_order ASC, id ASC`,
+    [row.id]
+  );
+  const images = imagesResult.rows.map(item => item.image_url);
+  return buildMappedProductRow(row, images);
+}
+
+async function mapProductRows(rows = []) {
+  if (!Array.isArray(rows) || !rows.length) return [];
+
+  const productIds = rows
+    .map((row) => Number(row?.id))
+    .filter((id) => Number.isInteger(id));
+
+  if (!productIds.length) {
+    return rows.map((row) => buildMappedProductRow(row, []));
+  }
+
+  const imagesResult = await query(
+    `SELECT product_id, image_url
+     FROM product_images
+     WHERE product_id = ANY($1::int[])
+     ORDER BY product_id ASC, sort_order ASC, id ASC`,
+    [productIds]
+  );
+
+  const imageMap = new Map();
+  for (const item of imagesResult.rows) {
+    const list = imageMap.get(item.product_id) || [];
+    list.push(item.image_url);
+    imageMap.set(item.product_id, list);
+  }
+
+  return rows.map((row) => buildMappedProductRow(row, imageMap.get(row.id) || []));
 }
 
 async function getProductById(productId) {
@@ -215,179 +247,6 @@ async function refreshSellerStats(sellerId) {
   );
 }
 
-async function seedDatabase() {
-  const passwordHash = bcrypt.hashSync('12345678', 10);
-  const adminExists = await query(`SELECT id FROM users WHERE role = 'admin' LIMIT 1`);
-  if (!adminExists.rows[0]) {
-    await query(
-      `INSERT INTO users (
-        full_name, store_name, phone, email, password_hash, role, region, profile_description, whatsapp
-      )
-      VALUES ($1,$2,$3,$4,$5,'admin',$6,$7,$8)`,
-      [
-        'المشرف العام',
-        'إدارة السوق',
-        '0900000000',
-        'admin@example.com',
-        passwordHash,
-        'دمشق',
-        'إدارة المنصة',
-        '0900000000'
-      ]
-    );
-  }
-
-  const usersCount = await query(`SELECT COUNT(*)::int AS count FROM users`);
-  if (usersCount.rows[0].count > 0) return;
-
-  const sellerResult = await query(
-    `INSERT INTO users (
-      full_name, store_name, phone, email, password_hash, role, region, profile_description, whatsapp
-    )
-    VALUES ($1,$2,$3,$4,$5,'seller',$6,$7,$8)
-    RETURNING *`,
-    [
-      'رنا أحمد',
-      'بيت الحلويات الشامية',
-      '0999123456',
-      'rana@example.com',
-      passwordHash,
-      'دمشق',
-      'حلويات منزلية وتجهيز حسب الطلب.',
-      '0999123456'
-    ]
-  );
-  const seller = sellerResult.rows[0];
-
-  await query(
-    `INSERT INTO seller_profiles (user_id, display_name, bio)
-     VALUES ($1, $2, $3)`,
-    [seller.id, seller.store_name, seller.profile_description]
-  );
-
-  const buyerResult = await query(
-    `INSERT INTO users (
-      full_name, phone, email, password_hash, role, region, profile_description, whatsapp
-    )
-    VALUES ($1,$2,$3,$4,'buyer',$5,$6,$7)
-    RETURNING *`,
-    [
-      'مشتري تجريبي',
-      '0999000001',
-      'buyer@example.com',
-      passwordHash,
-      'دمشق',
-      'حساب مشتري تجريبي',
-      '0999000001'
-    ]
-  );
-  const buyer = buyerResult.rows[0];
-
-  await query(
-    `INSERT INTO users (
-      full_name, store_name, phone, email, password_hash, role, region, profile_description, whatsapp
-    )
-    VALUES ($1,$2,$3,$4,$5,'admin',$6,$7,$8)`,
-    [
-      'المشرف العام',
-      'إدارة السوق',
-      '0900000000',
-      'admin@example.com',
-      passwordHash,
-      'دمشق',
-      'إدارة المنصة',
-      '0900000000'
-    ]
-  );
-
-  const p1 = await query(
-    `INSERT INTO products (
-      seller_id, name, description, price, currency, category, tags_json, region, item_condition, quantity, status, views_count
-    ) VALUES ($1,$2,$3,$4,$5,$6,$7::jsonb,$8,$9,$10,'published',$11)
-    RETURNING id`,
-    [
-      seller.id,
-      'معمول فاخر بالفستق',
-      'معمول منزلي محشو بالفستق الحلبي، تجهيز يومي، مناسب للهدايا والضيافة.',
-      18000,
-      'ل.س',
-      'حلويات',
-      JSON.stringify(['منزلي', 'ضيافة', 'هدايا']),
-      'دمشق',
-      'جديد',
-      10,
-      540
-    ]
-  );
-
-  await query(
-    `INSERT INTO product_images (product_id, image_url, sort_order)
-     VALUES ($1,$2,0),($1,$3,1)`,
-    [
-      p1.rows[0].id,
-      'https://images.unsplash.com/photo-1519864600265-abb23847ef2c?auto=format&fit=crop&w=1200&q=80',
-      'https://images.unsplash.com/photo-1541976076758-347942db1978?auto=format&fit=crop&w=1200&q=80'
-    ]
-  );
-
-  const p2 = await query(
-    `INSERT INTO products (
-      seller_id, name, description, price, currency, category, tags_json, region, item_condition, quantity, status, views_count
-    ) VALUES ($1,$2,$3,$4,$5,$6,$7::jsonb,$8,$9,$10,'published',$11)
-    RETURNING id`,
-    [
-      seller.id,
-      'مربى تين منزلي',
-      'مربى تين منزلي بمكونات طبيعية وتحضير نظيف.',
-      22000,
-      'ل.س',
-      'مأكولات',
-      JSON.stringify(['بيتي', 'طبيعي', 'فطور']),
-      'اللاذقية',
-      'جديد',
-      6,
-      210
-    ]
-  );
-
-  await query(
-    `INSERT INTO product_images (product_id, image_url, sort_order)
-     VALUES ($1,$2,0)`,
-    [
-      p2.rows[0].id,
-      'https://images.unsplash.com/photo-1514996937319-344454492b37?auto=format&fit=crop&w=1200&q=80'
-    ]
-  );
-
-  // sample closed conversation + rating
-  const conv = await query(
-    `INSERT INTO conversations (product_id, seller_id, buyer_id, conversation_type, status, last_message_at)
-     VALUES ($1,$2,$3,'inquiry','closed',NOW())
-     RETURNING id`,
-    [p1.rows[0].id, seller.id, buyer.id]
-  );
-
-  await query(
-    `INSERT INTO messages (conversation_id, sender_id, message_body, is_read)
-     VALUES ($1,$2,$3,TRUE),($1,$4,$5,TRUE)`,
-    [
-      conv.rows[0].id,
-      buyer.id,
-      'مرحبا، هل المنتج متوفر اليوم؟',
-      seller.id,
-      'نعم، متوفر ويمكن التواصل عبر واتساب.'
-    ]
-  );
-
-  await query(
-    `INSERT INTO ratings (conversation_id, product_id, seller_id, buyer_id, score, comment)
-     VALUES ($1,$2,$3,$4,$5,$6)`,
-    [conv.rows[0].id, p1.rows[0].id, seller.id, buyer.id, 5, 'تاجر متعاون وسريع بالرد']
-  );
-
-  await refreshSellerStats(seller.id);
-}
-
 async function ensureDefaultAdminAccess() {
   const passwordHash = bcrypt.hashSync('12345678', 10);
   const result = await query(
@@ -404,8 +263,8 @@ async function ensureDefaultAdminAccess() {
     await query(
       `UPDATE users
        SET role = 'admin',
-           full_name = COALESCE(NULLIF(full_name, ''), 'المشرف العام'),
-           store_name = COALESCE(store_name, 'إدارة السوق'),
+           full_name = COALESCE(NULLIF(full_name, ''), 'Ø§Ù„Ù…Ø´Ø±Ù Ø§Ù„Ø¹Ø§Ù…'),
+           store_name = COALESCE(store_name, 'Ø¥Ø¯Ø§Ø±Ø© Ø§Ù„Ø³ÙˆÙ‚'),
            email = COALESCE(email, 'admin@example.com'),
            phone = COALESCE(phone, '0900000000'),
            password_hash = $2,
@@ -423,13 +282,13 @@ async function ensureDefaultAdminAccess() {
     )
     VALUES ($1,$2,$3,$4,$5,'admin',$6,$7,$8,TRUE)`,
     [
-      'المشرف العام',
-      'إدارة السوق',
+      'Ø§Ù„Ù…Ø´Ø±Ù Ø§Ù„Ø¹Ø§Ù…',
+      'Ø¥Ø¯Ø§Ø±Ø© Ø§Ù„Ø³ÙˆÙ‚',
       '0900000000',
       'admin@example.com',
       passwordHash,
-      'دمشق',
-      'إدارة المنصة',
+      'Ø¯Ù…Ø´Ù‚',
+      'Ø¥Ø¯Ø§Ø±Ø© Ø§Ù„Ù…Ù†ØµØ©',
       '0900000000'
     ]
   );
@@ -528,7 +387,6 @@ async function seedDatabase() {
     tags,
     region,
     itemCondition,
-    quantity,
     viewsCount,
     images
   }) => {
@@ -548,16 +406,16 @@ async function seedDatabase() {
            description = $2,
            price = $3,
            currency = $4,
-           category = $5,
-           tags_json = $6::jsonb,
-           region = $7,
-           item_condition = $8,
-           quantity = $9,
-           status = 'published',
-           views_count = $10,
-           updated_at = NOW()
-         WHERE id = $1`,
-        [productId, description, price, currency, category, JSON.stringify(tags), region, itemCondition, quantity, viewsCount]
+            category = $5,
+            tags_json = $6::jsonb,
+            region = $7,
+            item_condition = $8,
+            quantity = 1,
+            status = 'published',
+            views_count = $9,
+            updated_at = NOW()
+          WHERE id = $1`,
+        [productId, description, price, currency, category, JSON.stringify(tags), region, itemCondition, viewsCount]
       );
     } else {
       const inserted = await query(
@@ -565,7 +423,7 @@ async function seedDatabase() {
           seller_id, name, description, price, currency, category, tags_json, region, item_condition, quantity, status, views_count
         ) VALUES ($1,$2,$3,$4,$5,$6,$7::jsonb,$8,$9,$10,'published',$11)
         RETURNING id`,
-        [sellerId, name, description, price, currency, category, JSON.stringify(tags), region, itemCondition, quantity, viewsCount]
+        [sellerId, name, description, price, currency, category, JSON.stringify(tags), region, itemCondition, 1, viewsCount]
       );
       productId = inserted.rows[0].id;
     }
@@ -593,11 +451,11 @@ async function seedDatabase() {
   const seller = await ensureUser({
     email: 'rana@example.com',
     role: 'seller',
-    fullName: 'رنا أحمد',
-    storeName: 'بيت الحلويات الشامية',
+    fullName: 'Ø±Ù†Ø§ Ø£Ø­Ù…Ø¯',
+    storeName: 'Ø¨ÙŠØª Ø§Ù„Ø­Ù„ÙˆÙŠØ§Øª Ø§Ù„Ø´Ø§Ù…ÙŠØ©',
     phone: '0999123456',
-    region: 'دمشق',
-    profileDescription: 'حلويات منزلية وتجهيز حسب الطلب.',
+    region: 'Ø¯Ù…Ø´Ù‚',
+    profileDescription: 'Ø­Ù„ÙˆÙŠØ§Øª Ù…Ù†Ø²Ù„ÙŠØ© ÙˆØªØ¬Ù‡ÙŠØ² Ø­Ø³Ø¨ Ø§Ù„Ø·Ù„Ø¨.',
     whatsapp: '0999123456'
   });
   await ensureSellerProfile(seller);
@@ -605,24 +463,23 @@ async function seedDatabase() {
   const buyer = await ensureUser({
     email: 'buyer@example.com',
     role: 'buyer',
-    fullName: 'مشتري تجريبي',
+    fullName: 'Ù…Ø´ØªØ±ÙŠ ØªØ¬Ø±ÙŠØ¨ÙŠ',
     phone: '0999000001',
-    region: 'دمشق',
-    profileDescription: 'حساب مشتري تجريبي',
+    region: 'Ø¯Ù…Ø´Ù‚',
+    profileDescription: 'Ø­Ø³Ø§Ø¨ Ù…Ø´ØªØ±ÙŠ ØªØ¬Ø±ÙŠØ¨ÙŠ',
     whatsapp: '0999000001'
   });
 
   const p1Id = await ensureProduct({
     sellerId: seller.id,
-    name: 'معمول فاخر بالفستق',
-    description: 'معمول منزلي محشو بالفستق الحلبي، تجهيز يومي، مناسب للهدايا والضيافة.',
+    name: 'Ù…Ø¹Ù…ÙˆÙ„ ÙØ§Ø®Ø± Ø¨Ø§Ù„ÙØ³ØªÙ‚',
+    description: 'Ù…Ø¹Ù…ÙˆÙ„ Ù…Ù†Ø²Ù„ÙŠ Ù…Ø­Ø´Ùˆ Ø¨Ø§Ù„ÙØ³ØªÙ‚ Ø§Ù„Ø­Ù„Ø¨ÙŠØŒ ØªØ¬Ù‡ÙŠØ² ÙŠÙˆÙ…ÙŠØŒ Ù…Ù†Ø§Ø³Ø¨ Ù„Ù„Ù‡Ø¯Ø§ÙŠØ§ ÙˆØ§Ù„Ø¶ÙŠØ§ÙØ©.',
     price: 18000,
-    currency: 'ل.س',
-    category: 'حلويات',
-    tags: ['منزلي', 'ضيافة', 'هدايا'],
-    region: 'دمشق',
-    itemCondition: 'جديد',
-    quantity: 10,
+    currency: 'Ù„.Ø³',
+    category: 'Ø­Ù„ÙˆÙŠØ§Øª',
+    tags: ['Ù…Ù†Ø²Ù„ÙŠ', 'Ø¶ÙŠØ§ÙØ©', 'Ù‡Ø¯Ø§ÙŠØ§'],
+    region: 'Ø¯Ù…Ø´Ù‚',
+    itemCondition: 'Ø¬Ø¯ÙŠØ¯',
     viewsCount: 540,
     images: [
       'https://images.unsplash.com/photo-1519864600265-abb23847ef2c?auto=format&fit=crop&w=1200&q=80',
@@ -632,15 +489,14 @@ async function seedDatabase() {
 
   await ensureProduct({
     sellerId: seller.id,
-    name: 'مربى تين منزلي',
-    description: 'مربى تين منزلي بمكونات طبيعية وتحضير نظيف.',
+    name: 'Ù…Ø±Ø¨Ù‰ ØªÙŠÙ† Ù…Ù†Ø²Ù„ÙŠ',
+    description: 'Ù…Ø±Ø¨Ù‰ ØªÙŠÙ† Ù…Ù†Ø²Ù„ÙŠ Ø¨Ù…ÙƒÙˆÙ†Ø§Øª Ø·Ø¨ÙŠØ¹ÙŠØ© ÙˆØªØ­Ø¶ÙŠØ± Ù†Ø¸ÙŠÙ.',
     price: 22000,
-    currency: 'ل.س',
-    category: 'مأكولات',
-    tags: ['بيتي', 'طبيعي', 'فطور'],
-    region: 'اللاذقية',
-    itemCondition: 'جديد',
-    quantity: 6,
+    currency: 'Ù„.Ø³',
+    category: 'Ù…Ø£ÙƒÙˆÙ„Ø§Øª',
+    tags: ['Ø¨ÙŠØªÙŠ', 'Ø·Ø¨ÙŠØ¹ÙŠ', 'ÙØ·ÙˆØ±'],
+    region: 'Ø§Ù„Ù„Ø§Ø°Ù‚ÙŠØ©',
+    itemCondition: 'Ø¬Ø¯ÙŠØ¯',
     viewsCount: 210,
     images: [
       'https://images.unsplash.com/photo-1514996937319-344454492b37?auto=format&fit=crop&w=1200&q=80'
@@ -671,9 +527,9 @@ async function seedDatabase() {
       [
         conversationId,
         buyer.id,
-        'مرحباً، هل المنتج متوفر اليوم؟',
+        'Ù…Ø±Ø­Ø¨Ø§Ù‹ØŒ Ù‡Ù„ Ø§Ù„Ù…Ù†ØªØ¬ Ù…ØªÙˆÙØ± Ø§Ù„ÙŠÙˆÙ…ØŸ',
         seller.id,
-        'نعم، متوفر ويمكن التواصل عبر واتساب.'
+        'Ù†Ø¹Ù…ØŒ Ù…ØªÙˆÙØ± ÙˆÙŠÙ…ÙƒÙ† Ø§Ù„ØªÙˆØ§ØµÙ„ Ø¹Ø¨Ø± ÙˆØ§ØªØ³Ø§Ø¨.'
       ]
     );
   }
@@ -690,7 +546,7 @@ async function seedDatabase() {
     await query(
       `INSERT INTO ratings (conversation_id, product_id, seller_id, buyer_id, score, comment)
        VALUES ($1,$2,$3,$4,$5,$6)`,
-      [conversationId, p1Id, seller.id, buyer.id, 5, 'تاجر متعاون وسريع بالرد']
+      [conversationId, p1Id, seller.id, buyer.id, 5, 'ØªØ§Ø¬Ø± Ù…ØªØ¹Ø§ÙˆÙ† ÙˆØ³Ø±ÙŠØ¹ Ø¨Ø§Ù„Ø±Ø¯']
     );
   }
 
@@ -1125,6 +981,7 @@ module.exports = {
   authRequired,
   roleRequired,
   mapProductRow,
+  mapProductRows,
   mapReportRow,
   mapConversationDealRow,
   getProductById,
@@ -1137,3 +994,4 @@ module.exports = {
   seedDatabase,
   getConversationById
 };
+

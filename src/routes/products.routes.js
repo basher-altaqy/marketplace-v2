@@ -11,7 +11,7 @@ const {
   logAudit,
   authRequired,
   roleRequired,
-  mapProductRow,
+  mapProductRows,
   getProductById,
   refreshSellerStats,
   seedDatabase,
@@ -89,7 +89,7 @@ router.get('/api/products', async (req, res, next) => {
     `;
 
     const result = await query(sql, params);
-    const products = await Promise.all(result.rows.map(mapProductRow));
+    const products = await mapProductRows(result.rows);
     res.json({ products });
   } catch (error) {
     next(error);
@@ -124,7 +124,7 @@ router.get('/api/products/:id', async (req, res, next) => {
 router.post('/api/products', authRequired, roleRequired('seller', 'admin'), upload.array('images', 5), async (req, res, next) => {
   const client = await pool.connect();
   try {
-    const { name, description, price, currency, category, subcategory, tags, region, condition, quantity, customFields, status, has_delivery_service } = req.body;
+    const { name, description, price, currency, category, subcategory, tags, region, condition, customFields, status, has_delivery_service } = req.body;
 
     if (!name || !description || !category || !region) {
       return res.status(400).json({ error: 'Name, description, category, and region are required.' });
@@ -160,7 +160,7 @@ router.post('/api/products', authRequired, roleRequired('seller', 'admin'), uplo
         JSON.stringify(parsedTags),
         region.trim(),
         condition || 'جديد',
-        Number(quantity || 1),
+        1,
         hasDeliveryService,
         JSON.stringify(parsedCustomFields),
         safeStatus
@@ -214,7 +214,7 @@ router.get('/api/my/products', authRequired, roleRequired('seller'), async (req,
       [req.user.id]
     );
 
-    const products = await Promise.all(result.rows.map(mapProductRow));
+    const products = await mapProductRows(result.rows);
     res.json({ products });
   } catch (error) {
     next(error);
@@ -363,7 +363,7 @@ router.get('/api/sellers/:id/public', async (req, res, next) => {
       [sellerId]
     );
 
-    const products = await Promise.all(productsResult.rows.map(mapProductRow));
+    const products = await mapProductRows(productsResult.rows);
 
     res.json({
       seller: {
@@ -425,7 +425,7 @@ router.get('/api/sellers/:id/products', async (req, res, next) => {
       [sellerId]
     );
 
-    const products = await Promise.all(result.rows.map(mapProductRow));
+    const products = await mapProductRows(result.rows);
     res.json({ products });
   } catch (error) {
     next(error);

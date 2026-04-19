@@ -4,17 +4,17 @@ const {
   query,
 } = require('../services/marketplace.service');
 const { collectSystemStatus } = require('../services/platform.service');
+const { adminAuthRequired } = require('./admin-auth.routes');
 
 router.get('/api/health', async (_req, res, next) => {
   try {
-    const status = await collectSystemStatus();
-    res.json({ ok: true, status });
+    res.json({ ok: true });
   } catch (error) {
     next(error);
   }
 });
 
-router.get('/api/system/status', async (_req, res, next) => {
+router.get('/api/system/status', adminAuthRequired, async (_req, res, next) => {
   try {
     const status = await collectSystemStatus();
     res.json({ status });

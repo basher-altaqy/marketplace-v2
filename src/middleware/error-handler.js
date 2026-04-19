@@ -1,5 +1,6 @@
 const multer = require('multer');
 const { logSystemEvent } = require('../services/platform.service');
+const { NODE_ENV } = require('../config/env');
 
 async function errorHandler(err, req, res, _next) {
   console.error(err);
@@ -11,7 +12,12 @@ async function errorHandler(err, req, res, _next) {
   if (err instanceof multer.MulterError) {
     return res.status(400).json({ error: err.message });
   }
-  return res.status(500).json({ error: err.message || 'Internal server error.' });
+
+  const safeMessage = NODE_ENV === 'production'
+    ? 'Internal server error.'
+    : (err.message || 'Internal server error.');
+
+  return res.status(500).json({ error: safeMessage });
 }
 
 module.exports = { errorHandler };

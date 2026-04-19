@@ -1,4 +1,4 @@
-<!DOCTYPE html>
+﻿<!DOCTYPE html>
 <html lang="ar" dir="rtl">
 <head>
   <meta charset="UTF-8" />
@@ -9,12 +9,14 @@
 <body>
   <div class="app-shell">
     <header class="topbar site-header">
-      <div class="container topbar-inner">
+      <div class="container topbar-inner home-topbar-layout">
         <a href="/" class="brand" id="brandHomeLink" data-route="/">
-          <span class="brand-mark brand-badge">س</span>
+          <span class="brand-mark brand-badge topbar-logo-wrap">
+            <img class="topbar-logo-img" src="/assets/site/topbar-logo.jpg" alt="شعار بضاعة بلدي" />
+            <span class="shimmer-effect" aria-hidden="true"></span>
+          </span>
           <div class="brand-copy">
             <div class="brand-title brand-text" id="siteBrandTitle">بضاعة بلدي</div>
-            <small class="muted" id="siteBrandTagline">سوق محلي بتجربة عرض أهدأ وأكثر احترافية</small>
           </div>
         </a>
 
@@ -30,7 +32,7 @@
           </button>
           <div class="mobile-header-menu" id="mobileHeaderMenu">
             <button class="btn btn-light mobile-header-menu-toggle" id="mobileHeaderMenuToggle" type="button" aria-expanded="false" aria-label="فتح القائمة الرئيسية" title="القائمة الرئيسية">
-              <span aria-hidden="true">▦</span>
+              <span aria-hidden="true">☰</span>
               <span>القائمة</span>
             </button>
             <div class="mobile-header-dropdown hidden" id="mobileHeaderDropdown"></div>
@@ -90,14 +92,12 @@
             <div class="hero-overlay"></div>
             <div class="hero-shell">
               <div class="hero-text">
-                <div class="hero-kicker" id="heroKicker">منصة محلية متجددة</div>
                 <h1 id="heroTitle">بضاعة بلدي</h1>
-                <p id="heroDescription">
-                  مساحة عرض أوسع للتجار والحرفيين والمنتجات المحلية، مع تصفح أسرع، بطاقات أوضح، وتجربة شراء أكثر أناقة.
-                </p>
                 <div class="hero-actions">
-                  <a class="boxed-btn" href="/" data-home-scroll="filtersSection">تصفح المنتجات</a>
-                  <button class="bordered-btn" id="heroSellerCtaBtn" type="button">ابدأ البيع</button>
+                  <a class="boxed-btn golden-btn" href="/" data-home-scroll="filtersSection">تصفح المنتجات</a>
+                  <div class="rainbow-btn-outer">
+                    <button class="rainbow-btn-inner" id="heroSellerCtaBtn" type="button">ابدأ البيع</button>
+                  </div>
                 </div>
               </div>
             </div>
@@ -567,34 +567,27 @@
 
     </main>
 
-    <footer class="site-footer">
-      <div class="container footer-grid">
-        <div>
-          <div class="footer-title">بضاعة بلدي</div>
+    <footer class="site-footer footer">
+      <div class="footer-container">
+        <div class="footer-brand">
+          <h3>بضاعة بلدي</h3>
           <p>منصة سوق محلي بواجهة أنظف، تصفح أسرع، وسهولة أكبر في الوصول إلى المنتجات والبائعين.</p>
         </div>
-        <div>
-          <div class="footer-title">التصفح</div>
-          <a href="#home">الرئيسية</a><br />
-          <a href="#catalog">المنتجات</a><br />
+        <div class="footer-links">
+          <a href="#home">الرئيسية</a>
+          <a href="#catalog">المنتجات</a>
           <a href="#messages">محادثات</a>
-        </div>
-        <div>
-          <div class="footer-title">الحساب</div>
-          <a href="#profile">الملف الشخصي</a><br />
-          <a href="#favorites">المفضلة</a><br />
+          <a href="#profile">الملف الشخصي</a>
+          <a href="#favorites">المفضلة</a>
           <a href="#orders">الطلبات</a>
-        </div>
-        <div>
-          <div class="footer-title">الدعم</div>
-          <a href="#" data-content-key="contact_info">تواصل معنا</a><br />
-          <a href="#" data-content-key="privacy_policy">الخصوصية</a><br />
-          <a href="#" data-content-key="terms_of_use">الشروط</a><br />
+          <a href="#" data-content-key="contact_info">تواصل معنا</a>
+          <a href="#" data-content-key="privacy_policy">الخصوصية</a>
+          <a href="#" data-content-key="terms_of_use">الشروط</a>
           <a href="#" data-content-key="faq">الأسئلة الشائعة</a>
         </div>
-      </div>
-      <div class="container footer-bottom">
-        <span id="footerYearText">© 2026 بضاعة بلدي. جميع الحقوق محفوظة.</span>
+        <div class="footer-copyright">
+          <span id="footerYearText">© 2026 بضاعة بلدي. جميع الحقوق محفوظة.</span>
+        </div>
       </div>
     </footer>
     <nav class="mobile-bottom-nav" id="mobileBottomNav" aria-label="التنقل السفلي للجوال"></nav>
