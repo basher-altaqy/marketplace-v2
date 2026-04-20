@@ -50,6 +50,8 @@ const DEFAULT_SITE_CONTENT = [
   }
 ];
 const MANAGED_TABLES_IN_RESET_ORDER = [
+  'push_delivery_logs',
+  'push_subscriptions',
   'verification_codes',
   'system_logs',
   'audit_logs',

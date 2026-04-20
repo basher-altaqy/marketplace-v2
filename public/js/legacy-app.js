@@ -48,9 +48,51 @@ const state = {
   }
 };
 
+const PUSH_PROMPT_STORAGE_KEY = "marketplacePushPromptStateV1";
+const PUSH_SERVICE_WORKER_PATH = "/sw.js";
+const PUSH_SUPPORTED =
+  typeof window !== "undefined"
+  && "serviceWorker" in navigator
+  && "Notification" in window
+  && "PushManager" in window;
+
+function readPushPromptState() {
+  try {
+    const raw = localStorage.getItem(PUSH_PROMPT_STORAGE_KEY);
+    if (!raw) return { asked: false, accepted: false, declined: false };
+    const parsed = JSON.parse(raw);
+    return {
+      asked: Boolean(parsed?.asked),
+      accepted: Boolean(parsed?.accepted),
+      declined: Boolean(parsed?.declined)
+    };
+  } catch (_error) {
+    return { asked: false, accepted: false, declined: false };
+  }
+}
+
+function writePushPromptState(nextState) {
+  const normalized = {
+    asked: Boolean(nextState?.asked),
+    accepted: Boolean(nextState?.accepted),
+    declined: Boolean(nextState?.declined)
+  };
+  localStorage.setItem(PUSH_PROMPT_STORAGE_KEY, JSON.stringify(normalized));
+  state.pushRuntime.promptState = normalized;
+  return normalized;
+}
+
+state.pushRuntime = state.pushRuntime || {
+  promptState: readPushPromptState(),
+  registrationPromise: null,
+  subscribePromise: null,
+  vapidPublicKey: "",
+  isSubscribed: false
+};
+
 const V1_FLAGS = {
   admin: false,
-  notifications: false,
+  notifications: true,
   support: false,
   reports: false,
   conversationDeals: false,
@@ -475,6 +517,9 @@ const loginForm = document.getElementById("loginForm");
 const registerForm = document.getElementById("registerForm");
 const profileForm = document.getElementById("profileForm");
 const avatarForm = document.getElementById("avatarForm");
+const enableBrowserPushBtn = document.getElementById("enableBrowserPushBtn");
+const unsubscribeBrowserPushBtn = document.getElementById("unsubscribeBrowserPushBtn");
+const pushSubscriptionStatusText = document.getElementById("pushSubscriptionStatusText");
 const addProductForm = document.getElementById("addProductForm");
 const reportForm = document.getElementById("reportForm");
 
@@ -903,6 +948,10 @@ function api(path, options = {}) {
     headers.Authorization = `Bearer ${state.token}`;
   }
 
+  if (window.marketplacePoller?.notifyApiRequest) {
+    window.marketplacePoller.notifyApiRequest(path);
+  }
+
   return fetch(path, { ...options, headers }).then(async (res) => {
     const contentType = res.headers.get("content-type") || "";
     const data = contentType.includes("application/json")
@@ -961,6 +1010,17 @@ function setAuth(authData) {
 
   syncRoleSpecificFields();
   refreshNav();
+  if (state.user && state.token) {
+    window.marketplacePoller?.start?.();
+    if (PUSH_SUPPORTED && Notification.permission === "granted") {
+      ensurePushSubscription("auth").catch(() => {});
+    }
+    syncPushSettingsUi().catch(() => {});
+  } else {
+    window.marketplacePoller?.stop?.();
+    state.pushRuntime.isSubscribed = false;
+    syncPushSettingsUi().catch(() => {});
+  }
 }
 
 async function restoreSession() {
@@ -1687,6 +1747,7 @@ async function submitOrderFromCart(notes = "") {
   }
 
   if (!beginSubmission(submissionKey)) return;
+  requestContextualPushPermission("order-cart").catch(() => {});
   const restoreUi = setSubmittingUi(confirmCheckoutBtn, { loadingText: "جارٍ إنشاء الطلب..." });
 
   try {
@@ -2006,6 +2067,228 @@ function renderFilterChips(container, { closeOnSelect = false } = {}) {
       await loadProducts();
       if (closeOnSelect) setMobileFiltersOpen(false);
     });
+  });
+}
+
+function toUint8ArrayFromBase64(base64Value = "") {
+  const padding = "=".repeat((4 - (base64Value.length % 4)) % 4);
+  const base64 = (base64Value + padding).replace(/-/g, "+").replace(/_/g, "/");
+  const raw = window.atob(base64);
+  const bytes = new Uint8Array(raw.length);
+  for (let index = 0; index < raw.length; index += 1) {
+    bytes[index] = raw.charCodeAt(index);
+  }
+  return bytes;
+}
+
+async function registerPushServiceWorker() {
+  if (!PUSH_SUPPORTED) return null;
+  if (state.pushRuntime.registrationPromise) return state.pushRuntime.registrationPromise;
+
+  state.pushRuntime.registrationPromise = navigator.serviceWorker.register(PUSH_SERVICE_WORKER_PATH)
+    .then((registration) => registration)
+    .catch((error) => {
+      console.debug("[push] service worker registration failed", error?.message || error);
+      return null;
+    })
+    .finally(() => {
+      state.pushRuntime.registrationPromise = null;
+    });
+
+  return state.pushRuntime.registrationPromise;
+}
+
+async function getPushVapidPublicKey() {
+  if (state.pushRuntime.vapidPublicKey) return state.pushRuntime.vapidPublicKey;
+
+  try {
+    const data = await api("/api/push/vapid-public-key");
+    const publicKey = String(data?.publicKey || "").trim();
+    if (!publicKey) return "";
+    state.pushRuntime.vapidPublicKey = publicKey;
+    return publicKey;
+  } catch (error) {
+    const message = String(error?.message || "");
+    if (message.toLowerCase().includes("disabled")) return "";
+    console.debug("[push] failed to fetch vapid key", message);
+    return "";
+  }
+}
+
+async function ensurePushSubscription(reason = "runtime") {
+  if (!PUSH_SUPPORTED || !state.user || !state.token) return false;
+  if (Notification.permission !== "granted") return false;
+
+  if (state.pushRuntime.subscribePromise) return state.pushRuntime.subscribePromise;
+
+  state.pushRuntime.subscribePromise = (async () => {
+    const registration = await registerPushServiceWorker();
+    if (!registration) return false;
+
+    try {
+      let subscription = await registration.pushManager.getSubscription();
+      if (!subscription) {
+        const publicKey = await getPushVapidPublicKey();
+        if (!publicKey) return false;
+        subscription = await registration.pushManager.subscribe({
+          userVisibleOnly: true,
+          applicationServerKey: toUint8ArrayFromBase64(publicKey)
+        });
+      }
+
+      const serialized = subscription?.toJSON ? subscription.toJSON() : subscription;
+      await api("/api/push/subscribe", {
+        method: "POST",
+        body: JSON.stringify({ subscription: serialized })
+      });
+
+      state.pushRuntime.isSubscribed = true;
+      return true;
+    } catch (error) {
+      const message = String(error?.message || "");
+      if (!message.toLowerCase().includes("disabled")) {
+        console.debug(`[push] ensure subscription failed (${reason})`, message);
+      }
+      return false;
+    } finally {
+      state.pushRuntime.subscribePromise = null;
+    }
+  })();
+
+  return state.pushRuntime.subscribePromise;
+}
+
+function fireAndForgetPushClientEvent(eventType, metadata = {}) {
+  if (!state.token || !eventType) return;
+  fetch("/api/push/client-event", {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      Authorization: `Bearer ${state.token}`
+    },
+    credentials: "same-origin",
+    keepalive: true,
+    body: JSON.stringify({
+      eventType,
+      metadata
+    })
+  }).catch(() => {});
+}
+
+async function getCurrentPushSubscription() {
+  if (!PUSH_SUPPORTED) return null;
+  const existingRegistration = await navigator.serviceWorker.getRegistration();
+  const registration = existingRegistration || await registerPushServiceWorker();
+  if (!registration) return null;
+  return registration.pushManager.getSubscription();
+}
+
+async function syncPushSettingsUi() {
+  if (!pushSubscriptionStatusText) return;
+
+  if (!state.user || !state.token) {
+    pushSubscriptionStatusText.textContent = "سجل الدخول أولًا لإدارة إشعارات المتصفح.";
+    if (enableBrowserPushBtn) enableBrowserPushBtn.disabled = true;
+    if (unsubscribeBrowserPushBtn) unsubscribeBrowserPushBtn.disabled = true;
+    return;
+  }
+
+  if (!PUSH_SUPPORTED) {
+    pushSubscriptionStatusText.textContent = "هذا المتصفح لا يدعم Web Push.";
+    if (enableBrowserPushBtn) enableBrowserPushBtn.disabled = true;
+    if (unsubscribeBrowserPushBtn) unsubscribeBrowserPushBtn.disabled = true;
+    return;
+  }
+
+  try {
+    const permission = Notification.permission;
+    const subscription = await getCurrentPushSubscription();
+    const hasSubscription = Boolean(subscription);
+
+    if (permission === "denied") {
+      pushSubscriptionStatusText.textContent = "الإشعارات محظورة من إعدادات المتصفح لهذا الموقع.";
+    } else if (permission === "granted" && hasSubscription) {
+      pushSubscriptionStatusText.textContent = "الإشعارات مفعّلة على هذا الجهاز.";
+    } else if (permission === "granted") {
+      pushSubscriptionStatusText.textContent = "الإذن مفعّل ولكن لا يوجد اشتراك نشط لهذا الجهاز.";
+    } else {
+      pushSubscriptionStatusText.textContent = "الإشعارات غير مفعّلة بعد. يمكنك تفعيلها من الزر أدناه.";
+    }
+
+    if (enableBrowserPushBtn) {
+      enableBrowserPushBtn.disabled = permission === "denied";
+    }
+    if (unsubscribeBrowserPushBtn) {
+      unsubscribeBrowserPushBtn.disabled = !hasSubscription;
+    }
+  } catch (error) {
+    pushSubscriptionStatusText.textContent = "تعذر قراءة حالة الإشعارات على هذا الجهاز حاليًا.";
+    if (enableBrowserPushBtn) enableBrowserPushBtn.disabled = false;
+    if (unsubscribeBrowserPushBtn) unsubscribeBrowserPushBtn.disabled = true;
+    console.debug("[push] failed to sync settings UI", error?.message || error);
+  }
+}
+
+async function requestContextualPushPermission(trigger = "general") {
+  if (!PUSH_SUPPORTED || !state.user || !state.token) return false;
+
+  if (Notification.permission === "denied") {
+    fireAndForgetPushClientEvent("push_permission_denied", { trigger, reason: "browser-denied" });
+    writePushPromptState({ asked: true, accepted: false, declined: true });
+    syncPushSettingsUi().catch(() => {});
+    return false;
+  }
+
+  if (Notification.permission === "granted") {
+    fireAndForgetPushClientEvent("push_permission_granted", { trigger, reason: "already-granted" });
+    writePushPromptState({ asked: true, accepted: true, declined: false });
+    const subscribed = await ensurePushSubscription(`${trigger}:already-granted`);
+    syncPushSettingsUi().catch(() => {});
+    return subscribed;
+  }
+
+  const publicKey = await getPushVapidPublicKey();
+  if (!publicKey) return false;
+
+  const promptState = state.pushRuntime.promptState || readPushPromptState();
+  if (promptState.declined || promptState.asked) {
+    return false;
+  }
+
+  writePushPromptState({ asked: true, accepted: false, declined: false });
+  fireAndForgetPushClientEvent("push_permission_requested", { trigger });
+
+  try {
+    const permission = await Notification.requestPermission();
+    if (permission === "granted") {
+      fireAndForgetPushClientEvent("push_permission_granted", { trigger, reason: "prompt-granted" });
+      writePushPromptState({ asked: true, accepted: true, declined: false });
+      const subscribed = await ensurePushSubscription(`${trigger}:prompt-granted`);
+      syncPushSettingsUi().catch(() => {});
+      return subscribed;
+    }
+
+    fireAndForgetPushClientEvent("push_permission_denied", { trigger, reason: "prompt-denied" });
+    writePushPromptState({ asked: true, accepted: false, declined: true });
+    syncPushSettingsUi().catch(() => {});
+    return false;
+  } catch (error) {
+    console.debug("[push] permission request failed", error?.message || error);
+    syncPushSettingsUi().catch(() => {});
+    return false;
+  }
+}
+
+if (PUSH_SUPPORTED) {
+  navigator.serviceWorker.addEventListener("message", (event) => {
+    const targetUrl = String(event?.data?.targetUrl || "");
+    if (!targetUrl) return;
+    const path = new URL(targetUrl, window.location.origin).pathname;
+    if (typeof window.navigateTo === "function") {
+      window.navigateTo(path).catch(() => {});
+      return;
+    }
+    window.location.href = path;
   });
 }
 
@@ -2765,6 +3048,7 @@ async function startConversation(productId) {
   }
 
   if (!beginSubmission(submissionKey)) return;
+  requestContextualPushPermission("conversation-start").catch(() => {});
 
   try {
     const data = await api("/api/conversations", {
@@ -2796,6 +3080,7 @@ async function purchaseProduct(productId, quantity = 1) {
   const submissionKey = `orderFromProduct:${Number(productId)}`;
   if (!ensureBuyerAccess()) return;
   if (!beginSubmission(submissionKey)) return;
+  requestContextualPushPermission("order-product").catch(() => {});
 
   try {
     const data = await api("/api/orders", {
@@ -3497,6 +3782,7 @@ function fillProfileFormFromUser() {
 
   syncRoleSpecificFields();
   renderProfileSummary();
+  syncPushSettingsUi().catch(() => {});
 }
 
 async function handleProfileSubmit(event) {
@@ -3764,6 +4050,7 @@ async function afterAuthLoad() {
     }
     await loadOrders();
     fillProfileFormFromUser();
+    window.marketplacePoller?.start?.();
   }
 }
 
@@ -4054,6 +4341,13 @@ function renderConversationMessages(messages = []) {
       : "";
     lastDayKey = dayKey || lastDayKey;
     const isOwn = message.senderId === state.user?.id;
+    const sendState = String(message.sendState || "").toLowerCase();
+    const isPending = sendState === "pending";
+    const isFailed = sendState === "failed";
+    const statusLabel = isPending ? "قيد الإرسال..." : isFailed ? "فشل الإرسال" : "";
+    const retryAction = isFailed && message.clientTempId
+      ? `<button class="chat-retry-btn" type="button" data-retry-message="${escapeHtml(String(message.clientTempId))}">إعادة المحاولة</button>`
+      : "";
 
     return `
       ${daySeparator}
@@ -4063,7 +4357,9 @@ function renderConversationMessages(messages = []) {
           <div class="chat-meta-inline">
             <span class="chat-time-inline">${escapeHtml(formatChatTime(message.createdAt))}</span>
             ${isOwn ? '<span class="chat-status-inline" aria-hidden="true">✓✓</span>' : ""}
+            ${statusLabel ? `<span class="chat-send-state">${escapeHtml(statusLabel)}</span>` : ""}
           </div>
+          ${retryAction}
         </div>
       </div>
     `;
@@ -4339,6 +4635,7 @@ async function openConversation(conversationId) {
   if (!conversationId) return;
   try {
     state.selectedConversationId = conversationId;
+    window.marketplacePoller?.notifyConversationOpened?.(conversationId);
     const data = await api(`/api/conversations/${conversationId}`);
     state.activeConversation = data.conversation || null;
     renderConversationsList(state.conversations, conversationId);
@@ -4371,12 +4668,45 @@ function renderNotifications() {
           </div>
           <div class="muted">${escapeHtml(item.body || "")}</div>
           <div class="notification-item-actions">
-            ${item.linkUrl ? `<a class="btn btn-light" href="${escapeHtml(item.linkUrl)}" data-route="${escapeHtml(item.linkUrl)}">فتح</a>` : ""}
+            ${item.linkUrl ? `<a class="btn btn-light" href="${escapeHtml(item.linkUrl)}" data-route="${escapeHtml(item.linkUrl)}" data-open-notification="${item.id}">فتح</a>` : ""}
             ${item.isRead ? "" : `<button class="btn btn-outline" type="button" data-read-notification="${item.id}">تمت القراءة</button>`}
           </div>
         </div>
       `).join("")
     : `<div class="soft-empty">لا توجد إشعارات حالياً.</div>`;
+
+  const markNotificationReadInBackground = (notificationId) => {
+    if (!state.token || !Number.isInteger(notificationId) || notificationId <= 0) return;
+    fetch(`/api/notifications/${notificationId}/read`, {
+      method: "PATCH",
+      headers: {
+        Authorization: `Bearer ${state.token}`
+      },
+      credentials: "same-origin",
+      keepalive: true
+    }).catch((error) => {
+      console.debug("[notifications] background mark-read failed", notificationId, error?.message || error);
+    });
+  };
+
+  notificationsList.querySelectorAll("[data-open-notification]").forEach((link) => {
+    link.addEventListener("click", () => {
+      const notificationId = Number(link.dataset.openNotification || 0);
+      if (!Number.isInteger(notificationId) || notificationId <= 0) return;
+
+      const notification = (state.notifications || []).find((item) => Number(item.id) === notificationId);
+      const wasUnread = Boolean(notification && !notification.isRead);
+      if (wasUnread) {
+        notification.isRead = true;
+        link.closest(".notification-item")?.classList.remove("is-unread");
+        link.closest(".notification-item")?.querySelector("[data-read-notification]")?.remove();
+        refreshNavBadges();
+      }
+
+      // Fire-and-forget to avoid blocking navigation while still persisting read state.
+      if (wasUnread) markNotificationReadInBackground(notificationId);
+    }, { capture: true });
+  });
 
   notificationsList.querySelectorAll("[data-read-notification]").forEach((btn) => {
     btn.addEventListener("click", async () => {
@@ -5574,6 +5904,7 @@ function bindStaticEvents() {
   navLoginBtn?.addEventListener("click", () => showView("auth"));
 
   navLogoutBtn?.addEventListener("click", () => {
+    window.marketplacePoller?.stop?.();
     setAuth(null);
     state.conversations = [];
     state.selectedConversationId = null;
@@ -5587,11 +5918,13 @@ function bindStaticEvents() {
     state.notifications = [];
     state.supportConversation = null;
     refreshNavBadges();
+    syncPushSettingsUi().catch(() => {});
     showView("home");
   });
 
   navProfileBtn?.addEventListener("click", () => {
     fillProfileFormFromUser();
+    syncPushSettingsUi().catch(() => {});
     showView("profile");
   });
 
@@ -5776,6 +6109,60 @@ function bindStaticEvents() {
     const clickedChatMenuConversationAction = event.target.closest('[data-chat-menu-action="conversations"]');
     if (!mobileConversationPicker.contains(event.target) && !clickedConversationTrigger && !clickedChatMenuConversationAction) {
       setMobileConversationPickerOpen(false);
+    }
+  });
+
+  enableBrowserPushBtn?.addEventListener("click", async () => {
+    if (!state.user || !state.token) {
+      showToast("يجب تسجيل الدخول أولًا.");
+      return;
+    }
+
+    const enabled = await requestContextualPushPermission("profile-settings");
+    if (enabled) {
+      showToast("تم تفعيل إشعارات المتصفح لهذا الجهاز.", "success");
+    } else if (Notification.permission === "denied") {
+      showToast("الإشعارات محظورة من المتصفح. يمكنك تغيير ذلك من إعدادات الموقع.", "error");
+    } else {
+      showToast("لم يتم تفعيل الإشعارات على هذا الجهاز.", "info");
+    }
+
+    await syncPushSettingsUi();
+  });
+
+  unsubscribeBrowserPushBtn?.addEventListener("click", async () => {
+    if (!state.user || !state.token) {
+      showToast("يجب تسجيل الدخول أولًا.");
+      return;
+    }
+
+    if (!PUSH_SUPPORTED) {
+      showToast("هذا المتصفح لا يدعم Web Push.");
+      return;
+    }
+
+    try {
+      const subscription = await getCurrentPushSubscription();
+      const endpoint = String(subscription?.endpoint || "").trim();
+      if (!subscription || !endpoint) {
+        showToast("لا يوجد اشتراك نشط على هذا الجهاز.");
+        await syncPushSettingsUi();
+        return;
+      }
+
+      fireAndForgetPushClientEvent("push_permission_denied", { trigger: "profile-unsubscribe", reason: "manual-unsubscribe" });
+      await api("/api/push/unsubscribe", {
+        method: "POST",
+        body: JSON.stringify({ endpoint })
+      });
+      await subscription.unsubscribe().catch(() => {});
+      state.pushRuntime.isSubscribed = false;
+      writePushPromptState({ asked: true, accepted: false, declined: false });
+      showToast("تم إلغاء اشتراك هذا الجهاز من إشعارات المتصفح.", "success");
+    } catch (error) {
+      showToast(error.message || "تعذر إلغاء الاشتراك من هذا الجهاز.", "error");
+    } finally {
+      await syncPushSettingsUi();
     }
   });
 
@@ -6047,6 +6434,7 @@ async function bootstrap() {
 
   if (state.user) {
     fillProfileFormFromUser();
+    await syncPushSettingsUi();
     await loadMessages();
     await loadNotifications();
     await loadFavorites();
@@ -6903,6 +7291,68 @@ async function openSellerPage(sellerId) {
   }
 }
 
+function upsertMessageInActiveConversation(message) {
+  if (!state.activeConversation) return;
+  const messages = Array.isArray(state.activeConversation.messages) ? state.activeConversation.messages : [];
+  const matchById = message.id ? messages.findIndex((item) => Number(item.id) === Number(message.id)) : -1;
+  const matchByTemp = message.clientTempId
+    ? messages.findIndex((item) => item.clientTempId && item.clientTempId === message.clientTempId)
+    : -1;
+  const index = matchById >= 0 ? matchById : matchByTemp;
+
+  if (index >= 0) {
+    messages[index] = { ...messages[index], ...message };
+  } else {
+    messages.push(message);
+  }
+
+  messages.sort((a, b) => {
+    const aTime = new Date(a.createdAt || 0).getTime();
+    const bTime = new Date(b.createdAt || 0).getTime();
+    if (aTime === bTime) return Number(a.id || 0) - Number(b.id || 0);
+    return aTime - bTime;
+  });
+
+  state.activeConversation.messages = messages;
+}
+
+async function sendConversationMessageOptimistic(conversationId, rawBody, clientTempId = null) {
+  const body = String(rawBody || "").trim();
+  if (!body) return;
+  requestContextualPushPermission("message").catch(() => {});
+
+  const tempId = clientTempId || `tmp-${conversationId}-${Date.now()}`;
+  const optimisticMessage = {
+    id: tempId,
+    clientTempId: tempId,
+    conversationId: Number(conversationId),
+    senderId: Number(state.user?.id || 0),
+    senderName: state.user?.fullName || state.user?.storeName || "أنت",
+    body,
+    createdAt: new Date().toISOString(),
+    sendState: "pending"
+  };
+
+  upsertMessageInActiveConversation(optimisticMessage);
+  renderConversationDetails(state.activeConversation);
+  updateConversationPreview(conversationId, body, optimisticMessage.createdAt);
+
+  try {
+    await api(`/api/conversations/${conversationId}/messages`, {
+      method: "POST",
+      body: JSON.stringify({ message: body })
+    });
+    window.marketplacePoller?.triggerImmediatePoll?.();
+  } catch (error) {
+    upsertMessageInActiveConversation({
+      ...optimisticMessage,
+      sendState: "failed"
+    });
+    renderConversationDetails(state.activeConversation);
+    throw error;
+  }
+}
+
 function renderConversationDetails(conversation) {
   if (!conversationDetails) return;
 
@@ -7000,13 +7450,8 @@ function renderConversationDetails(conversation) {
     }
 
     try {
-      await api(`/api/conversations/${conversation.id}/messages`, {
-        method: "POST",
-        body: JSON.stringify({ message })
-      });
       input.value = "";
-      await openConversation(conversation.id);
-      await loadMessages();
+      await sendConversationMessageOptimistic(conversation.id, message);
     } catch (error) {
       showToast(error.message || "تعذر إرسال الرسالة");
     }
@@ -7062,7 +7507,354 @@ function renderConversationDetails(conversation) {
   }
 
   const thread = document.getElementById("activeChatThread");
+  thread?.querySelectorAll("[data-retry-message]").forEach((button) => {
+    button.addEventListener("click", async () => {
+      const clientTempId = String(button.dataset.retryMessage || "");
+      const failedMessage = (state.activeConversation?.messages || []).find(
+        (item) => item.clientTempId === clientTempId
+      );
+      if (!failedMessage?.body) return;
+
+      try {
+        upsertMessageInActiveConversation({
+          ...failedMessage,
+          sendState: "pending",
+          createdAt: new Date().toISOString()
+        });
+        renderConversationDetails(state.activeConversation);
+        await sendConversationMessageOptimistic(conversation.id, failedMessage.body, clientTempId);
+      } catch (error) {
+        showToast(error.message || "تعذرت إعادة المحاولة");
+      }
+    });
+  });
+
   if (thread) {
     thread.scrollTop = thread.scrollHeight;
   }
 }
+
+const POLL_ACTIVE_INTERVAL_MS = 2000;
+const POLL_PASSIVE_INTERVAL_MS = 5000;
+const POLL_IDLE_INTERVAL_MS = 10000;
+const POLL_SLOW_INTERVAL_MS = 30000;
+const POLL_NO_CHANGE_THRESHOLD = 50;
+const POLL_ACTIVE_NO_CHANGE_THRESHOLD = 100;
+const POLL_IDLE_TIMEOUT_MS = 30000;
+const POLL_BATCH_WINDOW_MS = 500;
+
+state.realtimePolling = state.realtimePolling || {
+  lastServerNow: null,
+  noChangePollCount: 0
+};
+
+const pollRuntime = {
+  started: false,
+  timerId: null,
+  nextPollAt: 0,
+  lastInteractionAt: Date.now(),
+  pending: false,
+  lastApiRequestAt: 0,
+  retryAfterMs: 0,
+  debugEnabled: false
+};
+
+function pollDebug(message) {
+  if (!pollRuntime.debugEnabled) return;
+  console.log(`[Poller] ${message}`);
+}
+
+function recordRealtimeInteraction() {
+  pollRuntime.lastInteractionAt = Date.now();
+}
+
+function getActiveConversationId() {
+  return Number(state.selectedConversationId || state.activeConversation?.id || 0) || null;
+}
+
+function isInteractiveConversationSession() {
+  const activeConversationId = getActiveConversationId();
+  if (!activeConversationId) return false;
+  const elapsed = Date.now() - Number(pollRuntime.lastInteractionAt || 0);
+  return elapsed <= POLL_IDLE_TIMEOUT_MS;
+}
+
+function sortConversationsByRecency(conversations = []) {
+  return conversations.sort((a, b) => {
+    const aTime = new Date(a.lastMessageAt || a.updatedAt || a.createdAt || 0).getTime();
+    const bTime = new Date(b.lastMessageAt || b.updatedAt || b.createdAt || 0).getTime();
+    if (aTime === bTime) return Number(b.id || 0) - Number(a.id || 0);
+    return bTime - aTime;
+  });
+}
+
+function mergeNotificationsFromPoll(nextItems = []) {
+  if (!Array.isArray(nextItems) || !nextItems.length) return false;
+  const prevLength = state.notifications.length;
+  const byId = new Map((state.notifications || []).map((item) => [Number(item.id), item]));
+  for (const item of nextItems) {
+    const id = Number(item?.id || 0);
+    if (!id) continue;
+    byId.set(id, { ...(byId.get(id) || {}), ...item });
+  }
+  state.notifications = Array.from(byId.values()).sort((a, b) => {
+    const aTime = new Date(a.createdAt || a.updatedAt || 0).getTime();
+    const bTime = new Date(b.createdAt || b.updatedAt || 0).getTime();
+    if (aTime === bTime) return Number(b.id || 0) - Number(a.id || 0);
+    return bTime - aTime;
+  });
+  return state.notifications.length !== prevLength || nextItems.length > 0;
+}
+
+function mergeConversationsFromPoll(nextItems = []) {
+  if (!Array.isArray(nextItems) || !nextItems.length) return false;
+  const byId = new Map((state.conversations || []).map((item) => [Number(item.id), item]));
+  let changed = false;
+
+  for (const item of nextItems) {
+    const id = Number(item?.id || 0);
+    if (!id) continue;
+    const previous = byId.get(id);
+    byId.set(id, { ...(previous || {}), ...item });
+    if (!previous) {
+      changed = true;
+      continue;
+    }
+    if (
+      previous.lastMessage !== item.lastMessage
+      || String(previous.lastMessageAt || "") !== String(item.lastMessageAt || "")
+      || String(previous.status || "") !== String(item.status || "")
+    ) {
+      changed = true;
+    }
+  }
+
+  state.conversations = sortConversationsByRecency(Array.from(byId.values()));
+  return changed;
+}
+
+function mergeMessagesFromPoll(nextItems = []) {
+  if (!Array.isArray(nextItems) || !nextItems.length || !state.activeConversation) return false;
+
+  const messages = Array.isArray(state.activeConversation.messages) ? [...state.activeConversation.messages] : [];
+  let changed = false;
+
+  for (const serverMessage of nextItems) {
+    const serverId = Number(serverMessage?.id || 0);
+    if (!serverId) continue;
+
+    const existingServerIndex = messages.findIndex((item) => Number(item.id || 0) === serverId);
+    if (existingServerIndex >= 0) {
+      messages[existingServerIndex] = { ...messages[existingServerIndex], ...serverMessage, sendState: "" };
+      continue;
+    }
+
+    const pendingIndex = messages.findIndex((item) => {
+      if (item.sendState !== "pending") return false;
+      if (Number(item.senderId || 0) !== Number(serverMessage.senderId || 0)) return false;
+      if (String(item.body || "").trim() !== String(serverMessage.body || "").trim()) return false;
+      const pendingTime = new Date(item.createdAt || 0).getTime();
+      const serverTime = new Date(serverMessage.createdAt || 0).getTime();
+      return Number.isFinite(pendingTime) && Number.isFinite(serverTime) && Math.abs(serverTime - pendingTime) <= 120000;
+    });
+
+    if (pendingIndex >= 0) {
+      messages[pendingIndex] = { ...serverMessage, sendState: "" };
+      changed = true;
+      continue;
+    }
+
+    messages.push({ ...serverMessage, sendState: "" });
+    changed = true;
+  }
+
+  messages.sort((a, b) => {
+    const aTime = new Date(a.createdAt || 0).getTime();
+    const bTime = new Date(b.createdAt || 0).getTime();
+    if (aTime === bTime) return Number(a.id || 0) - Number(b.id || 0);
+    return aTime - bTime;
+  });
+
+  state.activeConversation.messages = messages;
+  return changed;
+}
+
+function getNextPollDelay() {
+  if (document.hidden || !state.user || !state.token) return null;
+
+  const activeConversationId = getActiveConversationId();
+  const noChange = Number(state.realtimePolling?.noChangePollCount || 0);
+
+  if (activeConversationId) {
+    if (isInteractiveConversationSession()) return POLL_ACTIVE_INTERVAL_MS;
+    if (noChange >= POLL_ACTIVE_NO_CHANGE_THRESHOLD) return Math.min(POLL_IDLE_INTERVAL_MS, POLL_SLOW_INTERVAL_MS);
+    return POLL_PASSIVE_INTERVAL_MS;
+  }
+
+  if (noChange >= POLL_NO_CHANGE_THRESHOLD) return POLL_SLOW_INTERVAL_MS;
+  return POLL_IDLE_INTERVAL_MS;
+}
+
+function clearPollTimer() {
+  if (!pollRuntime.timerId) return;
+  window.clearTimeout(pollRuntime.timerId);
+  pollRuntime.timerId = null;
+  pollRuntime.nextPollAt = 0;
+}
+
+function schedulePoll(delayMs = null) {
+  clearPollTimer();
+  const nextDelay = delayMs == null ? getNextPollDelay() : delayMs;
+  if (nextDelay == null) return;
+
+  pollRuntime.nextPollAt = Date.now() + Math.max(0, nextDelay);
+  pollRuntime.timerId = window.setTimeout(() => {
+    pollRuntime.timerId = null;
+    pollRuntime.nextPollAt = 0;
+    runAdaptivePoll();
+  }, Math.max(0, nextDelay));
+}
+
+async function runAdaptivePoll({ force = false } = {}) {
+  if (!state.user || !state.token) return;
+  if (document.hidden && !force) return;
+  if (pollRuntime.pending) return;
+
+  pollRuntime.pending = true;
+
+  try {
+    const params = new URLSearchParams();
+    if (state.realtimePolling?.lastServerNow) {
+      params.set("since", String(state.realtimePolling.lastServerNow));
+    }
+    const activeConversationId = getActiveConversationId();
+    if (activeConversationId) {
+      params.set("conversationId", String(activeConversationId));
+    }
+
+    const response = await fetch(`/api/poll?${params.toString()}`, {
+      method: "GET",
+      headers: {
+        Authorization: `Bearer ${state.token}`
+      },
+      cache: "no-store"
+    });
+
+    if (!response.ok) {
+      throw new Error(`poll failed (${response.status})`);
+    }
+
+    const retryAfterSeconds = Number.parseInt(response.headers.get("Retry-After") || "0", 10);
+    pollRuntime.retryAfterMs = Number.isInteger(retryAfterSeconds) && retryAfterSeconds > 0
+      ? retryAfterSeconds * 1000
+      : 0;
+    pollRuntime.debugEnabled = response.headers.get("X-Poll-Debug") === "1";
+
+    const payload = await response.json();
+    const conversationsChanged = mergeConversationsFromPoll(payload.conversations || []);
+    const notificationsChanged = mergeNotificationsFromPoll(payload.notifications || []);
+    const messagesChanged = mergeMessagesFromPoll(payload.messages || []);
+    const hasChange = conversationsChanged || notificationsChanged || messagesChanged;
+
+    if (payload?.serverNow) {
+      state.realtimePolling.lastServerNow = payload.serverNow;
+    }
+
+    if (hasChange) {
+      state.realtimePolling.noChangePollCount = 0;
+      refreshNavBadges();
+      if (!messagesView?.classList.contains("hidden")) {
+        renderConversationsList(state.conversations, getActiveConversationId());
+        if (state.activeConversation) renderConversationDetails(state.activeConversation);
+      }
+      if (!notificationsView?.classList.contains("hidden")) {
+        renderNotifications();
+      }
+    } else {
+      state.realtimePolling.noChangePollCount = Number(state.realtimePolling.noChangePollCount || 0) + 1;
+      if (state.realtimePolling.noChangePollCount === POLL_NO_CHANGE_THRESHOLD) {
+        pollDebug(`No changes for ${POLL_NO_CHANGE_THRESHOLD} polls, slowing down to ${POLL_SLOW_INTERVAL_MS}ms`);
+      }
+      if (state.realtimePolling.noChangePollCount === POLL_ACTIVE_NO_CHANGE_THRESHOLD && getActiveConversationId()) {
+        pollDebug(`Active conversation idle for ${POLL_ACTIVE_NO_CHANGE_THRESHOLD} polls, moving to passive interval`);
+      }
+    }
+  } catch (_error) {
+    const nextNoChange = Number(state.realtimePolling.noChangePollCount || 0) + 1;
+    state.realtimePolling.noChangePollCount = Math.max(nextNoChange, POLL_NO_CHANGE_THRESHOLD);
+  } finally {
+    pollRuntime.pending = false;
+    const suggestedDelay = pollRuntime.retryAfterMs > 0 ? pollRuntime.retryAfterMs : null;
+    schedulePoll(suggestedDelay);
+  }
+}
+
+function onPollingVisibilityChange() {
+  if (!pollRuntime.started) return;
+  if (document.hidden) {
+    clearPollTimer();
+    return;
+  }
+  runAdaptivePoll({ force: true });
+}
+
+function startAdaptivePolling() {
+  if (pollRuntime.started || !state.user || !state.token) return;
+  pollRuntime.started = true;
+  pollRuntime.lastInteractionAt = Date.now();
+  pollRuntime.retryAfterMs = 0;
+  window.addEventListener("visibilitychange", onPollingVisibilityChange);
+  window.addEventListener("mousemove", recordRealtimeInteraction, { passive: true });
+  window.addEventListener("keydown", recordRealtimeInteraction);
+  window.addEventListener("touchstart", recordRealtimeInteraction, { passive: true });
+  window.addEventListener("click", recordRealtimeInteraction, { passive: true });
+  runAdaptivePoll({ force: true });
+}
+
+function stopAdaptivePolling() {
+  if (!pollRuntime.started) return;
+  pollRuntime.started = false;
+  clearPollTimer();
+  pollRuntime.pending = false;
+  window.removeEventListener("visibilitychange", onPollingVisibilityChange);
+  window.removeEventListener("mousemove", recordRealtimeInteraction);
+  window.removeEventListener("keydown", recordRealtimeInteraction);
+  window.removeEventListener("touchstart", recordRealtimeInteraction);
+  window.removeEventListener("click", recordRealtimeInteraction);
+}
+
+window.marketplacePoller = {
+  start: startAdaptivePolling,
+  stop: stopAdaptivePolling,
+  triggerImmediatePoll() {
+    if (!pollRuntime.started) return;
+    runAdaptivePoll({ force: true });
+  },
+  notifyConversationOpened(_conversationId) {
+    recordRealtimeInteraction();
+    if (!pollRuntime.started) return;
+    runAdaptivePoll({ force: true });
+  },
+  notifyApiRequest(path) {
+    if (!pollRuntime.started) return;
+    if (String(path || "").startsWith("/api/poll")) return;
+    pollRuntime.lastApiRequestAt = Date.now();
+
+    if (!pollRuntime.timerId || !pollRuntime.nextPollAt) return;
+    const remaining = pollRuntime.nextPollAt - Date.now();
+    if (remaining <= POLL_BATCH_WINDOW_MS) {
+      const nextDelay = Math.max(getNextPollDelay() || POLL_IDLE_INTERVAL_MS, POLL_BATCH_WINDOW_MS * 2);
+      pollDebug(`API request near scheduled poll; postponing by ${nextDelay}ms`);
+      schedulePoll(nextDelay);
+    }
+  }
+};
+
+bootstrapPromise.finally(() => {
+  if (state.user && state.token) {
+    window.marketplacePoller.start();
+    if (PUSH_SUPPORTED && Notification.permission === "granted") {
+      ensurePushSubscription("bootstrap").catch(() => {});
+    }
+  }
+});

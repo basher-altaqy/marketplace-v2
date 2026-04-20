@@ -1,11 +1,21 @@
 const fs = require('fs');
 const path = require('path');
 const { query } = require('../db/pool');
-const { ROOT_DIR, UPLOADS_DIR } = require('../config/env');
+const {
+  ROOT_DIR,
+  UPLOADS_DIR,
+  WEB_PUSH_ENABLED,
+  VAPID_PUBLIC_KEY,
+  VAPID_PRIVATE_KEY,
+  VAPID_SUBJECT,
+  PUSH_METRICS_WINDOW_HOURS
+} = require('../config/env');
 
 const LOGS_DIR = path.join(ROOT_DIR, 'logs');
 const APP_LOG_FILE = path.join(LOGS_DIR, 'application.log');
 const BACKUP_SCRIPT_PATH = path.join(ROOT_DIR, 'scripts', 'db-backup.ps1');
+const PUSH_EVENTS_ENABLED = new Set(['message', 'order']);
+let webPushClientCache;
 const DEFAULT_CONTENT = [
   {
     key: 'about_company',
@@ -85,8 +95,331 @@ async function logSystemEvent(level, category, message, metadata = {}, actorUser
   }
 }
 
+function getWebPushClient() {
+  if (webPushClientCache !== undefined) return webPushClientCache;
+
+  if (!WEB_PUSH_ENABLED) {
+    webPushClientCache = null;
+    return webPushClientCache;
+  }
+
+  try {
+    const webPush = require('web-push');
+    webPush.setVapidDetails(VAPID_SUBJECT, VAPID_PUBLIC_KEY, VAPID_PRIVATE_KEY);
+    webPushClientCache = webPush;
+  } catch (error) {
+    console.error('[push] web-push is unavailable:', error.message);
+    webPushClientCache = null;
+  }
+
+  return webPushClientCache;
+}
+
+function normalizePushSubscription(subscription = {}) {
+  const endpoint = String(subscription.endpoint || '').trim();
+  const keys = subscription.keys && typeof subscription.keys === 'object' ? subscription.keys : {};
+  const p256dh = String(keys.p256dh || '').trim();
+  const auth = String(keys.auth || '').trim();
+  if (!endpoint || !p256dh || !auth) return null;
+  return { endpoint, keys: { p256dh, auth } };
+}
+
+function mapPushSubscriptionRow(row) {
+  if (!row) return null;
+  return {
+    id: row.id,
+    userId: row.user_id,
+    endpoint: row.endpoint,
+    keys: {
+      p256dh: row.p256dh,
+      auth: row.auth
+    },
+    userAgent: row.user_agent,
+    createdAt: row.created_at,
+    updatedAt: row.updated_at,
+    lastSuccessAt: row.last_success_at,
+    lastErrorAt: row.last_error_at
+  };
+}
+
+function getPushPublicKey() {
+  if (!WEB_PUSH_ENABLED) return null;
+  return VAPID_PUBLIC_KEY || null;
+}
+
+function summarizePushEndpoint(endpoint) {
+  const safe = String(endpoint || '').trim();
+  if (!safe) return '';
+  if (safe.length <= 80) return safe;
+  return `${safe.slice(0, 38)}...${safe.slice(-32)}`;
+}
+
+async function upsertPushSubscription(userId, subscription, userAgent = null) {
+  const normalized = normalizePushSubscription(subscription);
+  if (!normalized || !Number.isInteger(Number(userId))) return null;
+
+  const result = await query(
+    `INSERT INTO push_subscriptions (user_id, endpoint, p256dh, auth, user_agent, created_at, updated_at)
+     VALUES ($1, $2, $3, $4, $5, NOW(), NOW())
+     ON CONFLICT (user_id, endpoint)
+     DO UPDATE SET
+       p256dh = EXCLUDED.p256dh,
+       auth = EXCLUDED.auth,
+       user_agent = EXCLUDED.user_agent,
+       updated_at = NOW()
+     RETURNING *`,
+    [
+      Number(userId),
+      normalized.endpoint,
+      normalized.keys.p256dh,
+      normalized.keys.auth,
+      userAgent ? String(userAgent).slice(0, 512) : null
+    ]
+  );
+
+  const mapped = mapPushSubscriptionRow(result.rows[0]);
+  if (mapped) {
+    await logSystemEvent(
+      'info',
+      'push',
+      'push_subscription_upserted',
+      {
+        subscriptionId: mapped.id,
+        endpoint: summarizePushEndpoint(mapped.endpoint)
+      },
+      Number(userId)
+    );
+  }
+  return mapped;
+}
+
+async function removePushSubscription(userId, endpoint) {
+  if (!Number.isInteger(Number(userId))) return false;
+  const safeEndpoint = String(endpoint || '').trim();
+  if (!safeEndpoint) return false;
+
+  const result = await query(
+    `DELETE FROM push_subscriptions
+     WHERE user_id = $1 AND endpoint = $2
+     RETURNING id`,
+    [Number(userId), safeEndpoint]
+  );
+  const removed = Boolean(result.rows[0]);
+  if (removed) {
+    await logSystemEvent(
+      'info',
+      'push',
+      'push_subscription_unsubscribed',
+      {
+        subscriptionId: Number(result.rows[0].id || 0) || null,
+        endpoint: summarizePushEndpoint(safeEndpoint)
+      },
+      Number(userId)
+    );
+  }
+  return removed;
+}
+
+async function listPushSubscriptionsByUser(userId) {
+  const result = await query(
+    `SELECT *
+     FROM push_subscriptions
+     WHERE user_id = $1
+     ORDER BY updated_at DESC, id DESC`,
+    [Number(userId)]
+  );
+  return result.rows.map(mapPushSubscriptionRow);
+}
+
+async function logPushDelivery({
+  notificationId = null,
+  userId = null,
+  subscriptionId = null,
+  eventType = 'general',
+  status = 'failure',
+  errorCode = null,
+  errorMessage = null,
+  latencyMs = null
+} = {}) {
+  if (!Number.isInteger(Number(userId))) return;
+  await query(
+    `INSERT INTO push_delivery_logs (
+       notification_id,
+       user_id,
+       subscription_id,
+       event_type,
+       status,
+       error_code,
+       error_message,
+       latency_ms,
+       created_at
+     )
+     VALUES ($1, $2, $3, $4, $5, $6, $7, $8, NOW())`,
+    [
+      Number.isInteger(Number(notificationId)) ? Number(notificationId) : null,
+      Number(userId),
+      Number.isInteger(Number(subscriptionId)) ? Number(subscriptionId) : null,
+      String(eventType || 'general').trim() || 'general',
+      status === 'success' ? 'success' : 'failure',
+      errorCode ? String(errorCode).slice(0, 120) : null,
+      errorMessage ? String(errorMessage).slice(0, 4000) : null,
+      Number.isInteger(Number(latencyMs)) ? Number(latencyMs) : null
+    ]
+  );
+}
+
+async function sendPushToUser(userId, payload = {}, { eventType = 'general', notificationId = null } = {}) {
+  if (!WEB_PUSH_ENABLED) {
+    return { totalAttempts: 0, successCount: 0, failureCount: 0, invalidRemoved: 0 };
+  }
+
+  const webPush = getWebPushClient();
+  if (!webPush) {
+    return { totalAttempts: 0, successCount: 0, failureCount: 0, invalidRemoved: 0 };
+  }
+
+  const subscriptions = await listPushSubscriptionsByUser(userId);
+  if (!subscriptions.length) {
+    return { totalAttempts: 0, successCount: 0, failureCount: 0, invalidRemoved: 0 };
+  }
+
+  const pushPayload = JSON.stringify(payload || {});
+  const counters = {
+    totalAttempts: 0,
+    successCount: 0,
+    failureCount: 0,
+    invalidRemoved: 0
+  };
+
+  for (const subscription of subscriptions) {
+    counters.totalAttempts += 1;
+    const startedAt = Date.now();
+
+    try {
+      await webPush.sendNotification(
+        {
+          endpoint: subscription.endpoint,
+          keys: {
+            p256dh: subscription.keys?.p256dh,
+            auth: subscription.keys?.auth
+          }
+        },
+        pushPayload
+      );
+
+      counters.successCount += 1;
+      const latencyMs = Date.now() - startedAt;
+      await query(
+        `UPDATE push_subscriptions
+         SET last_success_at = NOW(), updated_at = NOW()
+         WHERE id = $1`,
+        [subscription.id]
+      );
+      await logPushDelivery({
+        notificationId,
+        userId,
+        subscriptionId: subscription.id,
+        eventType,
+        status: 'success',
+        latencyMs
+      });
+      await logSystemEvent(
+        'info',
+        'push',
+        'push_delivery_success',
+        {
+          notificationId: Number(notificationId || 0) || null,
+          subscriptionId: subscription.id,
+          eventType,
+          latencyMs
+        },
+        Number(userId)
+      );
+    } catch (error) {
+      counters.failureCount += 1;
+      const statusCode = Number(error?.statusCode || 0);
+      const isInvalidSubscription = statusCode === 404 || statusCode === 410;
+      const latencyMs = Date.now() - startedAt;
+
+      if (isInvalidSubscription) {
+        counters.invalidRemoved += 1;
+        await query(`DELETE FROM push_subscriptions WHERE id = $1`, [subscription.id]);
+      } else {
+        await query(
+          `UPDATE push_subscriptions
+           SET last_error_at = NOW(), updated_at = NOW()
+           WHERE id = $1`,
+          [subscription.id]
+        );
+      }
+
+      await logPushDelivery({
+        notificationId,
+        userId,
+        subscriptionId: subscription.id,
+        eventType,
+        status: 'failure',
+        errorCode: isInvalidSubscription ? 'invalid_subscription_removed' : String(error?.code || statusCode || 'unknown'),
+        errorMessage: String(error?.message || error?.body || 'Push delivery failed.'),
+        latencyMs
+      });
+      await logSystemEvent(
+        isInvalidSubscription ? 'warning' : 'error',
+        'push',
+        isInvalidSubscription ? 'push_delivery_failure_invalid_removed' : 'push_delivery_failure',
+        {
+          notificationId: Number(notificationId || 0) || null,
+          subscriptionId: subscription.id,
+          eventType,
+          latencyMs,
+          errorCode: String(error?.code || statusCode || 'unknown')
+        },
+        Number(userId)
+      );
+    }
+  }
+
+  return counters;
+}
+
+async function getPushDeliveryMetrics(windowHours = PUSH_METRICS_WINDOW_HOURS) {
+  const safeWindowHours = Math.max(1, Number.parseInt(String(windowHours || PUSH_METRICS_WINDOW_HOURS), 10) || PUSH_METRICS_WINDOW_HOURS);
+  const result = await query(
+    `SELECT
+       COUNT(*)::int AS total_attempts,
+       COUNT(*) FILTER (WHERE status = 'success')::int AS success_count,
+       COUNT(*) FILTER (WHERE status = 'failure')::int AS failure_count,
+       COUNT(*) FILTER (WHERE error_code = 'invalid_subscription_removed')::int AS invalid_removed
+     FROM push_delivery_logs
+     WHERE created_at >= NOW() - ($1::int * INTERVAL '1 hour')`,
+    [safeWindowHours]
+  );
+
+  const row = result.rows[0] || {};
+  const totalAttempts = Number(row.total_attempts || 0);
+  const successCount = Number(row.success_count || 0);
+  const failureCount = Number(row.failure_count || 0);
+  const invalidRemoved = Number(row.invalid_removed || 0);
+  const successRate = totalAttempts > 0 ? Number(((successCount / totalAttempts) * 100).toFixed(2)) : 0;
+
+  return {
+    windowHours: safeWindowHours,
+    totalAttempts,
+    successCount,
+    failureCount,
+    successRate,
+    invalidRemoved
+  };
+}
+
 async function createNotification(userId, type, title, body, linkUrl = null, metadata = {}) {
   if (!Number.isInteger(Number(userId))) return null;
+
+  const safeType = String(type || 'general').trim() || 'general';
+  const safeTitle = String(title || 'New notification').trim() || 'New notification';
+  const safeBody = String(body || '').trim() || 'A new notification was created.';
+  const safeLink = linkUrl?.trim() || null;
+  const safeMetadata = metadata && typeof metadata === 'object' ? metadata : {};
 
   const result = await query(
     `INSERT INTO notifications (user_id, type, title, body, link_url, metadata_json, is_read, created_at, updated_at)
@@ -94,15 +427,33 @@ async function createNotification(userId, type, title, body, linkUrl = null, met
      RETURNING *`,
     [
       Number(userId),
-      String(type || 'general').trim() || 'general',
-      String(title || 'إشعار جديد').trim() || 'إشعار جديد',
-      String(body || '').trim() || 'تم إنشاء إشعار جديد.',
-      linkUrl?.trim() || null,
-      JSON.stringify(metadata || {})
+      safeType,
+      safeTitle,
+      safeBody,
+      safeLink,
+      JSON.stringify(safeMetadata)
     ]
   );
 
-  return mapNotificationRow(result.rows[0]);
+  const notification = mapNotificationRow(result.rows[0]);
+  if (notification && WEB_PUSH_ENABLED && PUSH_EVENTS_ENABLED.has(safeType)) {
+    const pushPayload = {
+      title: safeTitle,
+      body: safeBody,
+      linkUrl: safeLink || '/',
+      type: safeType,
+      notificationId: notification.id,
+      metadata: safeMetadata
+    };
+
+    Promise.resolve()
+      .then(() => sendPushToUser(Number(userId), pushPayload, { eventType: safeType, notificationId: notification.id }))
+      .catch((error) => {
+        console.error('[push] failed to dispatch push payload:', error.message);
+      });
+  }
+
+  return notification;
 }
 
 function mapNotificationRow(row) {
@@ -219,6 +570,36 @@ async function ensurePlatformSupport() {
     )
   `);
 
+  await query(`
+    CREATE TABLE IF NOT EXISTS push_subscriptions (
+      id SERIAL PRIMARY KEY,
+      user_id INT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+      endpoint TEXT NOT NULL,
+      p256dh TEXT NOT NULL,
+      auth TEXT NOT NULL,
+      user_agent TEXT NULL,
+      created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+      updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+      last_success_at TIMESTAMP NULL,
+      last_error_at TIMESTAMP NULL
+    )
+  `);
+
+  await query(`
+    CREATE TABLE IF NOT EXISTS push_delivery_logs (
+      id SERIAL PRIMARY KEY,
+      notification_id INT REFERENCES notifications(id) ON DELETE SET NULL,
+      user_id INT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+      subscription_id INT REFERENCES push_subscriptions(id) ON DELETE SET NULL,
+      event_type VARCHAR(50) NOT NULL DEFAULT 'general',
+      status VARCHAR(20) NOT NULL,
+      error_code VARCHAR(120) NULL,
+      error_message TEXT NULL,
+      latency_ms INT NULL,
+      created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+    )
+  `);
+
   await query(`CREATE INDEX IF NOT EXISTS idx_system_logs_created_at ON system_logs(created_at DESC)`);
   await query(`CREATE INDEX IF NOT EXISTS idx_system_logs_level ON system_logs(log_level)`);
   await query(`CREATE INDEX IF NOT EXISTS idx_site_content_key ON site_content(content_key)`);
@@ -227,6 +608,12 @@ async function ensurePlatformSupport() {
   await query(`CREATE INDEX IF NOT EXISTS idx_support_messages_conversation ON support_messages(conversation_id, created_at ASC)`);
   await query(`CREATE INDEX IF NOT EXISTS idx_notifications_user_created ON notifications(user_id, created_at DESC)`);
   await query(`CREATE INDEX IF NOT EXISTS idx_notifications_user_read ON notifications(user_id, is_read)`);
+  await query(`CREATE UNIQUE INDEX IF NOT EXISTS idx_push_subscriptions_user_endpoint_unique ON push_subscriptions(user_id, endpoint)`);
+  await query(`CREATE INDEX IF NOT EXISTS idx_push_subscriptions_user_id ON push_subscriptions(user_id)`);
+  await query(`CREATE INDEX IF NOT EXISTS idx_push_subscriptions_updated_at ON push_subscriptions(updated_at DESC)`);
+  await query(`CREATE INDEX IF NOT EXISTS idx_push_delivery_logs_created_at ON push_delivery_logs(created_at DESC)`);
+  await query(`CREATE INDEX IF NOT EXISTS idx_push_delivery_logs_user_created ON push_delivery_logs(user_id, created_at DESC)`);
+  await query(`CREATE INDEX IF NOT EXISTS idx_push_delivery_logs_status_created ON push_delivery_logs(status, created_at DESC)`);
 
   for (const item of DEFAULT_CONTENT) {
     await query(
@@ -521,11 +908,12 @@ function getUploadPolicy() {
 async function collectSystemStatus() {
   const startedAt = global.__appStartedAt || new Date();
   const dbResult = await query('SELECT NOW() AS now');
-  const [logsResult, supportResult, reportsResult, notificationsResult] = await Promise.all([
+  const [logsResult, supportResult, reportsResult, notificationsResult, pushMetrics] = await Promise.all([
     query(`SELECT * FROM system_logs WHERE log_level = 'error' ORDER BY created_at DESC LIMIT 10`),
     query(`SELECT COUNT(*)::int AS total FROM support_conversations WHERE status IN ('open', 'pending')`),
     query(`SELECT COUNT(*)::int AS total FROM reports WHERE status = 'open'`),
-    query(`SELECT COUNT(*)::int AS total FROM notifications WHERE is_read = FALSE`)
+    query(`SELECT COUNT(*)::int AS total FROM notifications WHERE is_read = FALSE`),
+    getPushDeliveryMetrics(PUSH_METRICS_WINDOW_HOURS)
   ]);
 
   return {
@@ -546,7 +934,8 @@ async function collectSystemStatus() {
       openReports: Number(reportsResult.rows[0]?.total || 0)
     },
     notifications: {
-      unreadNotifications: Number(notificationsResult.rows[0]?.total || 0)
+      unreadNotifications: Number(notificationsResult.rows[0]?.total || 0),
+      push: pushMetrics
     },
     lastErrors: logsResult.rows.map((row) => ({
       id: row.id,
@@ -563,6 +952,11 @@ module.exports = {
   ensurePlatformSupport,
   logSystemEvent,
   createNotification,
+  getPushPublicKey,
+  upsertPushSubscription,
+  removePushSubscription,
+  sendPushToUser,
+  getPushDeliveryMetrics,
   listNotificationsByUser,
   markNotificationRead,
   markAllNotificationsRead,

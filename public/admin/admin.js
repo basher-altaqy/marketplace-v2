@@ -545,6 +545,27 @@
     const support = status.support || {};
     const reports = status.reports || {};
     const notifications = status.notifications || {};
+    const push = notifications.push || {};
+    const pushSuccessRateValue = Number(push.successRate || 0);
+    const pushSuccessRate = Number.isFinite(pushSuccessRateValue)
+      ? pushSuccessRateValue.toFixed(2) + '%'
+      : '0.00%';
+    const pushSuccessCount = Number(push.successCount || 0);
+    const pushFailureCount = Number(push.failureCount || 0);
+    const pushInvalidRemoved = Number(push.invalidRemoved || 0);
+    const pushWarnings = [];
+    if (pushSuccessRateValue < 90 && Number(push.totalAttempts || 0) > 0) {
+      pushWarnings.push('successRate<90%');
+    }
+    if (pushFailureCount > pushSuccessCount && Number(push.totalAttempts || 0) > 0) {
+      pushWarnings.push('failure>success');
+    }
+    if (pushInvalidRemoved >= 25) {
+      pushWarnings.push('invalidRemoved>=25');
+    }
+    const pushOperationalState = pushWarnings.length
+      ? `Warning (${pushWarnings.join(' | ')})`
+      : 'Normal';
 
     elements.systemStatusGrid.innerHTML = [
       ['حالة السيرفر', server.status || '-'],
@@ -554,6 +575,13 @@
       ['رسائل الدعم المفتوحة', formatNumber(support.openMessages)],
       ['البلاغات المفتوحة', formatNumber(reports.openReports)],
       ['الإشعارات غير المقروءة', formatNumber(notifications.unreadNotifications)],
+      ['محاولات Web Push', formatNumber(push.totalAttempts)],
+      ['نجاح Web Push', formatNumber(push.successCount)],
+      ['فشل Web Push', formatNumber(push.failureCount)],
+      ['نسبة النجاح Web Push', pushSuccessRate],
+      ['الاشتراكات غير الصالحة المحذوفة', formatNumber(push.invalidRemoved)],
+      ['نافذة القياس (بالساعات)', formatNumber(push.windowHours)],
+      ['حالة Push التشغيلية', pushOperationalState],
       ['حجم الرفع الأقصى', (uploads.maxFileSizeMb || '-') + ' MB'],
       ['عدد الملفات في الطلب', formatNumber(uploads.maxFilesPerRequest)],
       ['النسخ الاحتياطي', escapeHtml(uploads.backupFrequency || '-')]

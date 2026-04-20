@@ -3,6 +3,7 @@ const path = require('path');
 const { PUBLIC_DIR, UPLOADS_DIR } = require('./config/env');
 const { query } = require('./services/marketplace.service');
 const { assertDatabaseReady } = require('./services/bootstrap.service');
+const { ensurePlatformSupport } = require('./services/platform.service');
 const { errorHandler } = require('./middleware/error-handler');
 
 const systemRoutes = require('./routes/system.routes');
@@ -19,6 +20,8 @@ const { adminAuthRoutes } = require('./routes/admin-auth.routes');
 const contentRoutes = require('./routes/content.routes');
 const supportRoutes = require('./routes/support.routes');
 const notificationsRoutes = require('./routes/notifications.routes');
+const pollRoutes = require('./routes/poll.routes');
+const pushRoutes = require('./routes/push.routes');
 
 function createApp() {
   const app = express();
@@ -40,6 +43,8 @@ function createApp() {
   app.use(contentRoutes);
   app.use(supportRoutes);
   app.use(notificationsRoutes);
+  app.use(pushRoutes);
+  app.use(pollRoutes);
   app.use(adminAuthRoutes);
   app.use(adminRoutes);
 
@@ -72,6 +77,7 @@ function createApp() {
 async function prepareApp() {
   await query('SELECT 1');
   await assertDatabaseReady();
+  await ensurePlatformSupport();
 }
 
 module.exports = { createApp, prepareApp };
