@@ -5,10 +5,96 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>بضاعة بلدي</title>
   <link rel="stylesheet" href="/styles.css" />
+  <style>
+    @media (max-width: 900px) {
+      .topbar.site-header.topbar-layout-lock {
+        min-height: 68px !important;
+        height: 68px !important;
+      }
+
+      .topbar.site-header.topbar-layout-lock .topbar-inner.home-topbar-layout {
+        display: flex !important;
+        align-items: center !important;
+        justify-content: space-between !important;
+        min-height: 68px !important;
+        height: 68px !important;
+        padding: 8px 10px !important;
+        gap: 8px !important;
+      }
+
+      .topbar.site-header.topbar-layout-lock .brand {
+        flex: 1 1 auto !important;
+        min-width: 0 !important;
+        max-width: calc(100% - 54px) !important;
+        display: flex !important;
+        align-items: center !important;
+        gap: 8px !important;
+      }
+
+      .topbar.site-header.topbar-layout-lock .brand-mark.topbar-logo-wrap {
+        width: 42px !important;
+        height: 42px !important;
+        flex: 0 0 42px !important;
+      }
+
+      .topbar.site-header.topbar-layout-lock .topbar-logo-img {
+        width: 50px !important;
+        height: 50px !important;
+      }
+
+      .topbar.site-header.topbar-layout-lock .brand-copy {
+        min-width: 0 !important;
+        max-width: 100% !important;
+        display: flex !important;
+        align-items: center !important;
+      }
+
+      .topbar.site-header.topbar-layout-lock #siteBrandTitle {
+        font-size: 1.02rem !important;
+        line-height: 1.2 !important;
+        white-space: nowrap !important;
+        overflow: hidden !important;
+        text-overflow: ellipsis !important;
+      }
+
+      .topbar.site-header.topbar-layout-lock .header-nav-row {
+        flex: 0 0 44px !important;
+        width: 44px !important;
+        min-width: 44px !important;
+        margin: 0 !important;
+      }
+
+      .topbar.site-header.topbar-layout-lock .header-nav-row > .btn:not(.mobile-header-menu-toggle):not(.header-search-trigger) {
+        display: none !important;
+      }
+
+      .topbar.site-header.topbar-layout-lock .mobile-header-menu {
+        width: 44px !important;
+        min-width: 44px !important;
+        margin: 0 !important;
+      }
+
+      .topbar.site-header.topbar-layout-lock .mobile-header-menu-toggle {
+        width: 44px !important;
+        height: 44px !important;
+        min-width: 44px !important;
+        min-height: 44px !important;
+        padding: 0 !important;
+        border-radius: 12px !important;
+        display: inline-flex !important;
+        align-items: center !important;
+        justify-content: center !important;
+      }
+
+      .topbar.site-header.topbar-layout-lock .mobile-header-menu-toggle span:last-child {
+        display: none !important;
+      }
+    }
+  </style>
 </head>
 <body>
   <div class="app-shell">
-    <header class="topbar site-header">
+    <header class="topbar site-header topbar-layout-lock">
       <div class="container topbar-inner home-topbar-layout">
         <a href="/" class="brand" id="brandHomeLink" data-route="/">
           <span class="brand-mark brand-badge topbar-logo-wrap">
@@ -586,6 +672,22 @@
               اختر محادثة لعرض الرسائل
             </div>
           </section>
+        </div>
+      </section>
+
+      <section id="notificationsView" class="view hidden">
+        <div class="section-head">
+          <div>
+            <h2>التنبيهات</h2>
+            <p class="muted">كل إشعاراتك في مكان واحد، مع فتح سريع للمحادثات والطلبات.</p>
+          </div>
+          <div class="nav-actions">
+            <button class="btn btn-light" id="refreshNotificationsBtn" type="button">تحديث</button>
+            <button class="btn btn-outline" id="markAllNotificationsBtn" type="button">تحديد الكل كمقروء</button>
+          </div>
+        </div>
+        <div class="card">
+          <div id="notificationsList" class="list-stack"></div>
         </div>
       </section>
 

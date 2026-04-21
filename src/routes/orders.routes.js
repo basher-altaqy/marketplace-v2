@@ -11,8 +11,8 @@ const {
 const { createNotification, logSystemEvent } = require('../services/platform.service');
 
 const ORDER_STATUSES = ['submitted', 'seller_confirmed', 'buyer_confirmed', 'in_preparation', 'in_transport', 'completed', 'cancelled'];
-const V1_UI_ORDER_TRANSITIONS = ['seller_confirmed', 'cancelled'];
-const LEGACY_READ_ONLY_ORDER_STATUSES = ['buyer_confirmed', 'in_preparation', 'in_transport', 'completed'];
+const V1_UI_ORDER_TRANSITIONS = ['seller_confirmed', 'completed', 'cancelled'];
+const LEGACY_READ_ONLY_ORDER_STATUSES = ['buyer_confirmed', 'in_preparation', 'in_transport'];
 
 function validateOrderTransition(user, order, nextStatus) {
   if (!ORDER_STATUSES.includes(nextStatus)) {
@@ -40,17 +40,27 @@ function validateOrderTransition(user, order, nextStatus) {
       : { allowed: false, reason: 'Waiting for the seller response first.' };
   }
 
-  if (nextStatus === 'cancelled') {
-    return order.status === 'submitted' && isSeller
+  if (nextStatus === 'completed') {
+    return order.status === 'seller_confirmed' && isBuyer
       ? { allowed: true }
-      : { allowed: false, reason: 'Only the seller can reject this purchase request.' };
+      : { allowed: false, reason: 'Only the buyer can confirm receipt after seller acceptance.' };
+  }
+
+  if (nextStatus === 'cancelled') {
+    if (order.status === 'submitted' && isSeller) {
+      return { allowed: true };
+    }
+    if (order.status === 'seller_confirmed' && isBuyer) {
+      return { allowed: true };
+    }
+    return { allowed: false, reason: 'Seller can reject at submission; buyer can cancel only after seller acceptance.' };
   }
 
   if (LEGACY_READ_ONLY_ORDER_STATUSES.includes(nextStatus)) {
     return { allowed: false, reason: 'This legacy transition is not available in MVP v1.' };
   }
 
-  return { allowed: false, reason: 'Only accept or reject actions are available for this order.' };
+  return { allowed: false, reason: `Only ${V1_UI_ORDER_TRANSITIONS.join(', ')} transitions are available in MVP v1.` };
 }
 
 function getOrderStatusMessage(status, orderId, totalAmount) {
@@ -66,6 +76,27 @@ function getOrderStatusMessage(status, orderId, totalAmount) {
   };
 
   return messages[status] || `تم تحديث حالة الطلب #${orderId}.`;
+}
+
+function getOrderStatusMessageV2(status, orderId, totalAmount) {
+  const totalLabel = Number(totalAmount || 0).toFixed(2);
+  const messages = {
+    submitted: `تم إنشاء طلب شراء جديد رقم #${orderId} بقيمة ${totalLabel}.`,
+    seller_confirmed: `قبل التاجر طلب الشراء #${orderId}.`,
+    buyer_confirmed: `أكد المشتري الطلب #${orderId}.`,
+    in_preparation: `بدأ التاجر تجهيز الطلب #${orderId}.`,
+    in_transport: `أصبح الطلب #${orderId} في مرحلة النقل.`,
+    completed: `أكد المشتري استلام الطلب #${orderId}.`,
+    cancelled: `تم إلغاء طلب الشراء #${orderId}.`
+  };
+
+  return messages[status] || `تم تحديث حالة الطلب #${orderId}.`;
+}
+
+function getConversationStatusAfterOrderTransition(orderStatus) {
+  if (orderStatus === 'completed') return 'closed';
+  if (orderStatus === 'cancelled') return 'cancelled';
+  return null;
 }
 
 async function createOrderConversation(client, { buyerId, sellerId, productId }) {
@@ -95,7 +126,7 @@ async function insertOrderConversationMessage(client, { conversationId, senderId
   await insertConversationMessage(client, {
     conversationId,
     senderId,
-    body: getOrderStatusMessage(status, orderId, totalAmount)
+    body: getOrderStatusMessageV2(status, orderId, totalAmount)
   });
 }
 
@@ -436,6 +467,9 @@ router.get('/api/orders/:id', authRequired, async (req, res, next) => {
 });
 
 router.put('/api/orders/:id/status', authRequired, async (req, res, next) => {
+  const client = await pool.connect();
+  let hasTransaction = false;
+
   try {
     const order = await getOrderById(Number(req.params.id), req.user);
     if (!order) {
@@ -448,22 +482,39 @@ router.put('/api/orders/:id/status', authRequired, async (req, res, next) => {
       return res.status(403).json({ error: transition.reason || 'Status transition is not allowed.' });
     }
 
-    await query(
+    await client.query('BEGIN');
+    hasTransaction = true;
+
+    await client.query(
       `UPDATE orders SET status = $1, updated_at = NOW() WHERE id = $2`,
       [status, order.id]
     );
 
     if (order.conversationId) {
-      await query(
+      await client.query(
         `INSERT INTO messages (conversation_id, sender_id, message_body, is_read)
          VALUES ($1, $2, $3, FALSE)`,
-        [order.conversationId, req.user.id, getOrderStatusMessage(status, order.id, order.totalAmount)]
+        [order.conversationId, req.user.id, getOrderStatusMessageV2(status, order.id, order.totalAmount)]
       );
-      await query(
-        `UPDATE conversations SET last_message_at = NOW(), updated_at = NOW() WHERE id = $1`,
-        [order.conversationId]
-      );
+
+      const nextConversationStatus = getConversationStatusAfterOrderTransition(status);
+      if (nextConversationStatus) {
+        await client.query(
+          `UPDATE conversations
+           SET status = $1, last_message_at = NOW(), updated_at = NOW()
+           WHERE id = $2 AND conversation_type = 'order'`,
+          [nextConversationStatus, order.conversationId]
+        );
+      } else {
+        await client.query(
+          `UPDATE conversations SET last_message_at = NOW(), updated_at = NOW() WHERE id = $1`,
+          [order.conversationId]
+        );
+      }
     }
+
+    await client.query('COMMIT');
+    hasTransaction = false;
 
     const refreshed = await getOrderById(order.id, req.user);
     const notifyUserId = req.user.id === order.buyerId ? order.sellerId : order.buyerId;
@@ -471,14 +522,19 @@ router.put('/api/orders/:id/status', authRequired, async (req, res, next) => {
       notifyUserId,
       'order',
       'تحديث على حالة الطلب',
-      getOrderStatusMessage(status, order.id, order.totalAmount),
+      getOrderStatusMessageV2(status, order.id, order.totalAmount),
       '/orders',
       { orderId: order.id, status }
     );
     await logSystemEvent('info', 'order', 'order status updated', { orderId: order.id, status }, req.user.id);
     res.json({ order: refreshed });
   } catch (error) {
+    if (hasTransaction) {
+      await client.query('ROLLBACK');
+    }
     next(error);
+  } finally {
+    client.release();
   }
 });
 

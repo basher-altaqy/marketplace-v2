@@ -100,7 +100,7 @@ const V1_FLAGS = {
   legacyPurchaseModal: false
 };
 
-const V1_ALLOWED_ORDER_TRANSITIONS = new Set(["seller_confirmed", "cancelled"]);
+const V1_ALLOWED_ORDER_TRANSITIONS = new Set(["seller_confirmed", "completed", "cancelled"]);
 
 state.submissionState = state.submissionState || {};
 window.marketplaceApp = window.marketplaceApp || {};
@@ -1089,7 +1089,7 @@ function getMobileBottomNavItems() {
   if (isSeller) {
     return [
       { key: "home", label: "الرئيسية", icon: "⌂", type: "route", value: "/" },
-      { key: "search", label: "بحث", icon: "⌕", type: "action", value: "search" },
+      { key: "notifications", label: "تنبيهات", icon: "🔔", type: "action", value: "notifications", badge: Number((state.notifications || []).filter((item) => !item.isRead).length || 0) },
       { key: "messages", label: "محادثات", icon: "✉", type: "route", value: "/conversations", badge: Number(state.conversations?.length || 0) },
       { key: "dashboard", label: "لوحتي", icon: "▦", type: "route", value: "/dashboard" },
       { key: "orders", label: "طلبات", icon: "📦", type: "route", value: "/orders", badge: Number(state.orders?.length || 0) }
@@ -1099,7 +1099,7 @@ function getMobileBottomNavItems() {
   if (isBuyer) {
     return [
       { key: "home", label: "الرئيسية", icon: "⌂", type: "route", value: "/" },
-      { key: "search", label: "بحث", icon: "⌕", type: "action", value: "search" },
+      { key: "notifications", label: "تنبيهات", icon: "🔔", type: "action", value: "notifications", badge: Number((state.notifications || []).filter((item) => !item.isRead).length || 0) },
       { key: "favorites", label: "المفضلة", icon: "♡", type: "route", value: "/favorites", badge: Number(state.favorites?.length || 0) },
       { key: "cart", label: "السلة", icon: "🛒", type: "route", value: "/cart", badge: Number(state.cart?.totals?.quantity || 0) },
       { key: "messages", label: "محادثات", icon: "✉", type: "route", value: "/conversations", badge: Number(state.conversations?.length || 0) }
@@ -1108,7 +1108,7 @@ function getMobileBottomNavItems() {
 
   return [
     { key: "home", label: "الرئيسية", icon: "⌂", type: "route", value: "/" },
-    { key: "search", label: "بحث", icon: "⌕", type: "action", value: "search" },
+    { key: "notifications", label: "تنبيهات", icon: "🔔", type: "action", value: "notifications", badge: Number((state.notifications || []).filter((item) => !item.isRead).length || 0) },
     { key: "messages", label: "محادثات", icon: "✉", type: "route", value: "/conversations", badge: Number(state.conversations?.length || 0) },
     { key: "favorites", label: "المفضلة", icon: "♡", type: "route", value: "/favorites", badge: Number(state.favorites?.length || 0) },
     { key: "profile", label: "حسابي", icon: "◉", type: "route", value: "/profile" }
@@ -1122,6 +1122,7 @@ function isMobileNavItemActive(item) {
   const storefrontViews = new Set(["home", "catalog", "product", "seller"]);
 
   if (item.key === "search") return searchArea?.classList.contains("search-active");
+  if (item.key === "notifications") return currentView === "notifications";
   if (item.key === "products") return storefrontViews.has(currentView) || currentPath === "/";
   if (item.key === "menu") return state.mobileActiveSheet === "menu" || currentMenuViews.has(currentView);
   if (item.value === "/") return storefrontViews.has(currentView) || currentPath === "/";
@@ -2202,8 +2203,16 @@ async function syncPushSettingsUi() {
 
   try {
     const permission = Notification.permission;
-    const subscription = await getCurrentPushSubscription();
-    const hasSubscription = Boolean(subscription);
+    let subscription = await getCurrentPushSubscription();
+    let hasSubscription = Boolean(subscription);
+
+    if (permission === "granted" && !hasSubscription) {
+      const subscribed = await ensurePushSubscription("settings-sync");
+      if (subscribed) {
+        subscription = await getCurrentPushSubscription();
+        hasSubscription = Boolean(subscription);
+      }
+    }
 
     if (permission === "denied") {
       pushSubscriptionStatusText.textContent = "الإشعارات محظورة من إعدادات المتصفح لهذا الموقع.";
@@ -5087,34 +5096,14 @@ renderConversationDetails = function renderConversationDetailsV1(conversation) {
     const restoreUi = setSubmittingUi(sendButton, { loadingText: "جارٍ الإرسال..." });
 
     try {
-      const createdAt = new Date().toISOString();
       await api(`/api/conversations/${conversation.id}/messages`, {
         method: "POST",
         body: JSON.stringify({ message })
       });
 
-      const nextMessage = {
-        id: Date.now(),
-        body: message,
-        senderId: state.user?.id,
-        senderName: state.user?.storeName || state.user?.fullName || "",
-        createdAt
-      };
-
       input.value = "";
-      if (state.activeConversation?.id === conversation.id) {
-        const currentMessages = Array.isArray(state.activeConversation.messages) ? state.activeConversation.messages : [];
-        state.activeConversation = {
-          ...state.activeConversation,
-          messages: [...currentMessages, nextMessage]
-        };
-      }
-
-      const appended = appendMessageToThread(nextMessage);
-      const previewUpdated = updateConversationPreview(conversation.id, message, createdAt);
-      if (!appended || !previewUpdated || state.activeConversation?.id !== conversation.id) {
-        await openConversation(conversation.id);
-      }
+      await openConversation(conversation.id);
+      await loadMessages();
     } catch (error) {
       showToast(error.message || "تعذر إرسال الرسالة");
     } finally {
@@ -7006,12 +6995,12 @@ function formatOrderStatus(status) {
   const isSeller = isSellerUser();
   const labels = {
     submitted: isSeller ? "بانتظار ردك" : "بانتظار رد التاجر",
-    seller_confirmed: isSeller ? "تم قبول الطلب" : "مقبول من التاجر",
+    seller_confirmed: isSeller ? "تم قبول الطلب" : "بانتظار استلامك أو إلغائك",
     buyer_confirmed: "مقبول (مسار قديم)",
     in_preparation: "قيد التنفيذ (مسار قديم)",
     in_transport: "قيد النقل (مسار قديم)",
-    cancelled: isSeller ? "تم الرفض أو الإلغاء" : "مرفوض",
-    completed: "مكتمل (مسار قديم)"
+    cancelled: "ملغي",
+    completed: isSeller ? "تم الاستلام من المشتري" : "تم الاستلام"
   };
   return labels[status] || status || "-";
 }
@@ -7024,7 +7013,7 @@ function getOrderStatusExplanation(order) {
       : "تم إرسال طلب الشراء وهو الآن بانتظار رد التاجر.",
     seller_confirmed: isSeller
       ? "قمت بقبول هذا الطلب، ويمكنك متابعة التفاصيل من داخل المحادثة المرتبطة به."
-      : "وافق التاجر على طلب الشراء. تابع التفاصيل من داخل المحادثة المرتبطة بالطلب.",
+      : "وافق التاجر على الطلب. يمكنك الآن استلام الطلب أو إلغاؤه من نفس البطاقة.",
     buyer_confirmed: isSeller
       ? "هذا الطلب يتبع مسارًا قديمًا محفوظًا للعرض فقط في النسخة الحالية."
       : "هذا الطلب يتبع مسارًا قديمًا محفوظًا للعرض فقط في النسخة الحالية.",
@@ -7034,10 +7023,8 @@ function getOrderStatusExplanation(order) {
     in_transport: isSeller
       ? "هذا الطلب يتبع مسارًا قديمًا وانتقل إلى مرحلة لاحقة خارج نطاق النسخة الأولى."
       : "هذا الطلب يتبع مسارًا قديمًا وانتقل إلى مرحلة لاحقة خارج نطاق النسخة الأولى.",
-    cancelled: isSeller
-      ? "تم رفض هذا الطلب أو إلغاؤه، ولن تظهر له إجراءات إضافية."
-      : "تم رفض الطلب من التاجر أو إلغاؤه ولن تظهر له إجراءات إضافية.",
-    completed: "هذا الطلب يتبع مسارًا قديمًا وتم إكماله بالفعل."
+    cancelled: "تم إلغاء الطلب وإغلاق المحادثة المرتبطة به نهائيًا.",
+    completed: "تم استلام الطلب وإغلاق المحادثة المرتبطة به نهائيًا."
   };
   return messages[order?.status] || "لا توجد تفاصيل إضافية لهذه الحالة حاليًا.";
 }
@@ -7045,7 +7032,8 @@ function getOrderStatusExplanation(order) {
 function getOrderActionLabel(status) {
   const labels = {
     seller_confirmed: "قبول الطلب",
-    cancelled: "رفض الطلب"
+    completed: "استلام الطلب",
+    cancelled: "إلغاء الطلب"
   };
   return labels[status] || status;
 }
@@ -7053,9 +7041,15 @@ function getOrderActionLabel(status) {
 function getAllowedOrderActions(order) {
   const actions = [];
   const isSeller = state.user?.id === order.sellerId;
+  const isBuyer = state.user?.id === order.buyerId;
 
   if (order.status === "submitted" && isSeller) {
     actions.push({ key: "seller_confirmed", label: getOrderActionLabel("seller_confirmed"), tone: "btn-primary" });
+    actions.push({ key: "cancelled", label: "رفض الطلب", tone: "btn-outline" });
+  }
+
+  if (order.status === "seller_confirmed" && isBuyer) {
+    actions.push({ key: "completed", label: getOrderActionLabel("completed"), tone: "btn-primary" });
     actions.push({ key: "cancelled", label: getOrderActionLabel("cancelled"), tone: "btn-outline" });
   }
 
@@ -7063,12 +7057,13 @@ function getAllowedOrderActions(order) {
 }
 
 function getOrderProgressSteps(status) {
-  const normalizedStatus = ["seller_confirmed", "buyer_confirmed", "in_preparation", "in_transport", "completed"].includes(status)
+  const normalizedStatus = ["buyer_confirmed", "in_preparation", "in_transport"].includes(status)
     ? "seller_confirmed"
     : status;
   const steps = [
     { key: "submitted", label: "إرسال الطلب" },
-    { key: "seller_confirmed", label: "رد التاجر" }
+    { key: "seller_confirmed", label: "قبول التاجر" },
+    { key: "completed", label: "الاستلام" }
   ];
   const currentIndex = steps.findIndex((step) => step.key === normalizedStatus);
   return steps.map((step, index) => ({
@@ -7086,7 +7081,7 @@ function getOrderProgressSteps(status) {
 async function updateOrderStatus(orderId, status) {
   const nextStatus = String(status || "").trim();
   if (!V1_ALLOWED_ORDER_TRANSITIONS.has(nextStatus)) {
-    showToast("إجراءات الطلب المتاحة في هذه النسخة هي قبول الطلب أو رفضه فقط.", "error", "إجراء غير متاح");
+    showToast("الإجراءات المتاحة: قبول/رفض من التاجر، ثم استلام/إلغاء من المشتري.", "error", "إجراء غير متاح");
     return;
   }
 
@@ -7442,18 +7437,26 @@ function renderConversationDetails(conversation) {
   `;
 
   const sendConversationMessage = async () => {
+    const sendLockKey = `chat-send:${Number(conversation.id)}`;
+    if (!beginSubmission(sendLockKey)) return;
     const input = document.getElementById("conversationMessageInput");
+    const sendBtn = document.getElementById("sendConversationMessageBtn");
     const message = input?.value?.trim() || "";
     if (!message) {
       showToast("اكتب رسالة أولًا");
+      endSubmission(sendLockKey);
       return;
     }
 
     try {
+      if (sendBtn) sendBtn.disabled = true;
       input.value = "";
       await sendConversationMessageOptimistic(conversation.id, message);
     } catch (error) {
       showToast(error.message || "تعذر إرسال الرسالة");
+    } finally {
+      if (sendBtn) sendBtn.disabled = false;
+      endSubmission(sendLockKey);
     }
   };
 

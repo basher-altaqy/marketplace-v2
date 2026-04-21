@@ -105,3 +105,16 @@
 - If metrics are degraded:
   - disable Web Push by env (`WEB_PUSH_ENABLED=false`)
   - investigate logs and subscription churn, then re-enable after fix.
+
+## Order Finalization Flow (2026-04-22)
+- Seller keeps v1 entry decision on submitted orders:
+  - `submitted -> seller_confirmed`
+  - `submitted -> cancelled`
+- After seller acceptance, buyer now has final decision:
+  - `seller_confirmed -> completed` (receive order)
+  - `seller_confirmed -> cancelled` (cancel order)
+- Conversation finalization for order conversations is automatic:
+  - `completed` closes conversation with `status=closed`
+  - `cancelled` closes conversation with `status=cancelled`
+- Once an order conversation reaches `closed` or `cancelled`, it is final and cannot be reopened.
+- Rating remains one-time per conversation, and is now allowed after `closed` **or** `cancelled`.

@@ -161,9 +161,9 @@ router.get('/api/conversations/:id', authRequired, async (req, res, next) => {
 router.post('/api/conversations/:id/messages', authRequired, async (req, res, next) => {
   try {
     const conversationId = Number(req.params.id);
-    const { message } = req.body;
+    const messageText = String(req.body?.message || '').trim();
 
-    if (!message || !String(message).trim()) {
+    if (!messageText) {
       return res.status(400).json({ error: 'Message is required.' });
     }
 
@@ -175,27 +175,45 @@ router.post('/api/conversations/:id/messages', authRequired, async (req, res, ne
       return res.status(400).json({ error: 'Conversation is not open.' });
     }
 
-    await query(
-      `INSERT INTO messages (conversation_id, sender_id, message_body, is_read)
-       VALUES ($1, $2, $3, FALSE)`,
-      [conversationId, req.user.id, String(message).trim()]
+    const duplicateMessageResult = await query(
+      `SELECT id
+       FROM messages
+       WHERE conversation_id = $1
+         AND sender_id = $2
+         AND message_body = $3
+         AND created_at >= NOW() - INTERVAL '3 seconds'
+       ORDER BY created_at DESC, id DESC
+       LIMIT 1`,
+      [conversationId, req.user.id, messageText]
     );
+    const isDuplicateQuickSubmit = Boolean(duplicateMessageResult.rows[0]);
 
-    await query(
-      `UPDATE conversations SET last_message_at = NOW(), updated_at = NOW() WHERE id = $1`,
-      [conversationId]
-    );
+    if (!isDuplicateQuickSubmit) {
+      await query(
+        `INSERT INTO messages (conversation_id, sender_id, message_body, is_read)
+         VALUES ($1, $2, $3, FALSE)`,
+        [conversationId, req.user.id, messageText]
+      );
+
+      await query(
+        `UPDATE conversations SET last_message_at = NOW(), updated_at = NOW() WHERE id = $1`,
+        [conversationId]
+      );
+    }
 
     const refreshed = await getConversationById(conversationId, req.user.id);
-    const recipientId = conversation.sellerId === req.user.id ? conversation.buyerId : conversation.sellerId;
-    await createNotification(
-      recipientId,
-      'message',
-      'رسالة جديدة',
-      `وصلتك رسالة جديدة في محادثة المنتج: ${conversation.product?.name || 'منتج'}`,
-      '/messages',
-      { conversationId }
-    );
+    if (!isDuplicateQuickSubmit) {
+      const recipientId = conversation.sellerId === req.user.id ? conversation.buyerId : conversation.sellerId;
+      await createNotification(
+        recipientId,
+        'message',
+        'New message',
+        `You received a new message in conversation: ${conversation.product?.name || 'Product'}`,
+        '/messages',
+        { conversationId }
+      );
+    }
+
     res.status(201).json({ conversation: refreshed });
   } catch (error) {
     next(error);
@@ -214,6 +232,14 @@ router.patch('/api/conversations/:id/close', authRequired, async (req, res, next
     const conversation = await getConversationById(conversationId, req.user.id);
     if (!conversation) {
       return res.status(404).json({ error: 'Conversation not found.' });
+    }
+
+    if (
+      conversation.conversationType === 'order' &&
+      ['closed', 'cancelled'].includes(conversation.status) &&
+      status !== conversation.status
+    ) {
+      return res.status(400).json({ error: 'Order conversation is final and cannot be reopened.' });
     }
 
     await query(
@@ -249,8 +275,8 @@ router.post('/api/ratings', authRequired, roleRequired('buyer', 'admin'), async 
     if (req.user.role !== 'admin' && convo.buyer_id !== req.user.id) {
       return res.status(403).json({ error: 'Only the buyer can rate this conversation.' });
     }
-    if (convo.status !== 'closed') {
-      return res.status(400).json({ error: 'Rating is allowed only after closing the conversation.' });
+    if (!['closed', 'cancelled'].includes(convo.status)) {
+      return res.status(400).json({ error: 'Rating is allowed only after closing or cancelling the conversation.' });
     }
 
     const existing = await query(
