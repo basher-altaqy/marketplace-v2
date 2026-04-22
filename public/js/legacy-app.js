@@ -56,28 +56,43 @@ const PUSH_SUPPORTED =
   && "Notification" in window
   && "PushManager" in window;
 
-function readPushPromptState() {
+function getPushPromptStorageKey(userId = state.user?.id) {
+  const normalizedUserId = Number.parseInt(String(userId || ""), 10);
+  if (Number.isInteger(normalizedUserId) && normalizedUserId > 0) {
+    return `${PUSH_PROMPT_STORAGE_KEY}:u:${normalizedUserId}`;
+  }
+  return PUSH_PROMPT_STORAGE_KEY;
+}
+
+function readPushPromptState(userId = state.user?.id) {
   try {
-    const raw = localStorage.getItem(PUSH_PROMPT_STORAGE_KEY);
-    if (!raw) return { asked: false, accepted: false, declined: false };
-    const parsed = JSON.parse(raw);
-    return {
-      asked: Boolean(parsed?.asked),
-      accepted: Boolean(parsed?.accepted),
-      declined: Boolean(parsed?.declined)
-    };
+    const scopedKey = getPushPromptStorageKey(userId);
+    const fallbackKeys = [scopedKey];
+
+    for (const key of fallbackKeys) {
+      const raw = localStorage.getItem(key);
+      if (!raw) continue;
+      const parsed = JSON.parse(raw);
+      return {
+        asked: Boolean(parsed?.asked),
+        accepted: Boolean(parsed?.accepted),
+        declined: Boolean(parsed?.declined)
+      };
+    }
+
+    return { asked: false, accepted: false, declined: false };
   } catch (_error) {
     return { asked: false, accepted: false, declined: false };
   }
 }
 
-function writePushPromptState(nextState) {
+function writePushPromptState(nextState, userId = state.user?.id) {
   const normalized = {
     asked: Boolean(nextState?.asked),
     accepted: Boolean(nextState?.accepted),
     declined: Boolean(nextState?.declined)
   };
-  localStorage.setItem(PUSH_PROMPT_STORAGE_KEY, JSON.stringify(normalized));
+  localStorage.setItem(getPushPromptStorageKey(userId), JSON.stringify(normalized));
   state.pushRuntime.promptState = normalized;
   return normalized;
 }
@@ -1000,6 +1015,7 @@ function setAuth(authData) {
     state.notifications = [];
     state.supportConversation = null;
     state.reportDraft = null;
+    state.pushRuntime.promptState = readPushPromptState(nextUserId);
   }
 
   if (state.token) localStorage.setItem("token", state.token);
@@ -6704,6 +6720,7 @@ async function handleSecureLoginSubmit(event) {
     await afterAuthLoad();
     await loadNotifications();
     await loadVerificationStatus();
+    requestContextualPushPermission("login-success").catch(() => {});
     showView(state.user?.role === "seller" ? "dashboard" : "home");
     showToast("تم تسجيل الدخول بنجاح");
   } catch (error) {
@@ -6749,6 +6766,7 @@ async function handleSecureRegisterSubmit(event) {
     await afterAuthLoad();
     await loadNotifications();
     await loadVerificationStatus();
+    requestContextualPushPermission("register-success").catch(() => {});
     showToast("تم إنشاء الحساب بنجاح");
     showView("home");
   } catch (error) {
