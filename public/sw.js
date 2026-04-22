@@ -1,3 +1,17 @@
+self.resolvePushTargetPath = function resolvePushTargetPath(data) {
+  const rawLink = String(data?.linkUrl || '/').trim() || '/';
+  const type = String(data?.type || '').trim().toLowerCase();
+  const conversationId = Number.parseInt(String(data?.metadata?.conversationId || ''), 10);
+
+  if ((type === 'message' || rawLink === '/messages')
+    && Number.isInteger(conversationId)
+    && conversationId > 0) {
+    return `/conversation/${conversationId}`;
+  }
+
+  return rawLink;
+};
+
 self.addEventListener('push', (event) => {
   let payload = {};
   try {
@@ -21,7 +35,8 @@ self.addEventListener('push', (event) => {
       data: {
         linkUrl,
         notificationId: payload.notificationId || null,
-        type: payload.type || 'general'
+        type: payload.type || 'general',
+        metadata: payload.metadata && typeof payload.metadata === 'object' ? payload.metadata : {}
       }
     })
   );
@@ -29,7 +44,7 @@ self.addEventListener('push', (event) => {
 
 self.addEventListener('notificationclick', (event) => {
   event.notification.close();
-  const targetPath = String(event.notification?.data?.linkUrl || '/');
+  const targetPath = self.resolvePushTargetPath(event.notification?.data || {});
   const targetUrl = new URL(targetPath, self.location.origin).href;
 
   event.waitUntil(

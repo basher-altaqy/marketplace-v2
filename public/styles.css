@@ -16905,13 +16905,13 @@ header.topbar.site-header {
   width: fit-content !important;
   max-width: 100% !important;
   padding: 5px 12px !important;
-  border: 1.5px solid #3b7f49 !important;
+  border: 1px solid rgba(43, 94, 59, 0.34) !important;
   border-radius: 999px !important;
   background: transparent !important;
-  color: #215f34 !important;
+  color: #2f6f46 !important;
   font-weight: 800 !important;
   line-height: 1.15 !important;
-  box-shadow: 0 2px 7px rgba(33, 95, 52, 0.16) !important;
+  box-shadow: 0 1px 5px rgba(43, 94, 59, 0.11) !important;
   transform: translateY(-1px) !important;
   margin-inline: auto !important;
 }
@@ -16920,4 +16920,279 @@ header.topbar.site-header {
 .product-card.product-card-refined .product-title,
 .product-card.product-card-refined .product-title-compact {
   font-weight: 600 !important;
+}
+
+/* ===== Conversations status colors + web layout stabilization ===== */
+#messagesView .conversation-row-status.status-order-awaiting,
+#messagesView .conversation-row-status.status-order-cancelled {
+  background: rgba(239, 68, 68, 0.14) !important;
+  color: #b91c1c !important;
+  border: 1px solid rgba(239, 68, 68, 0.25) !important;
+}
+
+#messagesView .conversation-row-status.status-order-accepted {
+  background: rgba(34, 197, 94, 0.14) !important;
+  color: #15803d !important;
+  border: 1px solid rgba(34, 197, 94, 0.28) !important;
+}
+
+#messagesView .conversation-tail-label.status-order-awaiting,
+#messagesView .conversation-tail-label.status-order-cancelled {
+  background: rgba(239, 68, 68, 0.12) !important;
+  color: #b91c1c !important;
+  border: 1px solid rgba(239, 68, 68, 0.24) !important;
+}
+
+#messagesView .conversation-tail-label.status-order-accepted {
+  background: rgba(34, 197, 94, 0.12) !important;
+  color: #15803d !important;
+  border: 1px solid rgba(34, 197, 94, 0.24) !important;
+}
+
+@media (min-width: 901px) {
+  #messagesView .messages-shell,
+  #messagesView .whatsapp-shell {
+    display: grid !important;
+    grid-template-columns: minmax(300px, 340px) minmax(0, 1fr) !important;
+    align-items: stretch !important;
+    gap: 14px !important;
+    min-height: calc(100vh - 188px) !important;
+    height: calc(100vh - 188px) !important;
+  }
+
+  #messagesView .messages-sidebar.conversations-card,
+  #messagesView .conversations-card {
+    position: relative !important;
+    inset: auto !important;
+    width: auto !important;
+    max-width: none !important;
+    min-height: 0 !important;
+    height: 100% !important;
+    overflow: hidden !important;
+  }
+
+  #messagesView .messages-main-card,
+  #messagesView .whatsapp-main {
+    position: relative !important;
+    min-height: 0 !important;
+    height: 100% !important;
+    overflow: hidden !important;
+  }
+
+  #messagesView #conversationDetails,
+  #messagesView .chat-layout,
+  #messagesView .whatsapp-chat-layout {
+    display: flex !important;
+    flex-direction: column !important;
+    min-height: 0 !important;
+    height: 100% !important;
+    overflow: hidden !important;
+  }
+
+  #messagesView .chat-thread,
+  #messagesView .whatsapp-thread {
+    flex: 1 1 auto !important;
+    min-height: 0 !important;
+    max-height: none !important;
+    overflow-y: auto !important;
+  }
+
+  #messagesView .chat-composer,
+  #messagesView .whatsapp-composer {
+    display: block !important;
+    visibility: visible !important;
+    opacity: 1 !important;
+    flex: 0 0 auto !important;
+    margin-top: auto !important;
+    position: relative !important;
+    z-index: 3 !important;
+  }
+
+  #messagesView .conversations-list {
+    display: grid !important;
+    align-content: start !important;
+    gap: 10px !important;
+    padding: 0 !important;
+    overflow-y: auto !important;
+  }
+
+  #messagesView .conversation-card,
+  #messagesView .conversation-entry {
+    display: grid !important;
+    grid-template-columns: 46px minmax(0, 1fr) !important;
+    align-items: start !important;
+    column-gap: 10px !important;
+    row-gap: 6px !important;
+    min-height: 104px !important;
+    padding: 12px !important;
+    border-radius: 14px !important;
+    position: relative !important;
+    isolation: isolate !important;
+    overflow: hidden !important;
+  }
+
+  #messagesView .conversation-avatar,
+  #messagesView .conversation-avatar-pro {
+    width: 46px !important;
+    height: 46px !important;
+    min-width: 46px !important;
+    min-height: 46px !important;
+    border-radius: 14px !important;
+    font-size: 0.95rem !important;
+  }
+
+  #messagesView .conversation-card-body {
+    display: grid !important;
+    gap: 6px !important;
+    min-width: 0 !important;
+  }
+
+  #messagesView .conversation-row-top,
+  #messagesView .conversation-card-footer {
+    display: flex !important;
+    align-items: center !important;
+    justify-content: space-between !important;
+    gap: 8px !important;
+  }
+
+  #messagesView .conversation-row-name {
+    font-size: 0.9rem !important;
+    line-height: 1.45 !important;
+  }
+
+  #messagesView .conversation-row-time,
+  #messagesView .conversation-meta-note {
+    font-size: 0.7rem !important;
+  }
+
+  #messagesView .conversation-row-product strong {
+    font-size: 0.8rem !important;
+  }
+
+  #messagesView .conversation-row-last {
+    display: grid !important;
+    grid-template-columns: minmax(0, 1fr) auto !important;
+    align-items: center !important;
+    gap: 8px !important;
+    min-height: 28px !important;
+  }
+
+  #messagesView .conversation-last-text {
+    min-width: 0 !important;
+    white-space: nowrap !important;
+    overflow: hidden !important;
+    text-overflow: ellipsis !important;
+  }
+
+  #messagesView .conversation-tail-label {
+    display: inline-flex !important;
+    align-items: center !important;
+    justify-content: center !important;
+    min-height: 24px !important;
+    padding: 0 10px !important;
+    border-radius: 999px !important;
+    font-size: 0.7rem !important;
+    font-weight: 800 !important;
+    line-height: 1 !important;
+    flex: 0 0 auto !important;
+  }
+
+  #messagesView .messages-sidebar .conversations-list {
+    overflow-x: hidden !important;
+  }
+
+  #messagesView .chat-row {
+    display: flex !important;
+    width: 100% !important;
+  }
+
+  #messagesView .chat-row.is-me .chat-bubble {
+    margin-left: auto !important;
+    margin-right: 0 !important;
+  }
+
+  #messagesView .chat-row.is-other .chat-bubble {
+    margin-right: auto !important;
+    margin-left: 0 !important;
+  }
+
+}
+
+/* ===== Final chat colors polish (desktop + mobile) ===== */
+#messagesView .chat-thread,
+#messagesView .whatsapp-thread {
+  background:
+    radial-gradient(circle at 18% 14%, rgba(43, 94, 59, 0.06), transparent 22%),
+    radial-gradient(circle at 82% 10%, rgba(15, 118, 110, 0.05), transparent 20%),
+    #f6f8fb !important;
+}
+
+#messagesView .chat-bubble {
+  border: 1px solid rgba(148, 163, 184, 0.18) !important;
+  box-shadow: 0 8px 18px rgba(15, 23, 42, 0.08) !important;
+}
+
+#messagesView .chat-row.is-me .chat-bubble,
+#messagesView .chat-bubble.is-me {
+  background: linear-gradient(180deg, #e9ffdc, #d8fbc8) !important;
+  color: #1f2937 !important;
+  border-color: rgba(124, 179, 66, 0.45) !important;
+}
+
+#messagesView .chat-row.is-other .chat-bubble,
+#messagesView .chat-bubble.is-other {
+  background: #ffffff !important;
+  color: #0f172a !important;
+  border-color: rgba(148, 163, 184, 0.3) !important;
+}
+
+#messagesView .chat-row.is-me .chat-meta-inline {
+  color: #4d7c0f !important;
+}
+
+#messagesView .chat-row.is-other .chat-meta-inline {
+  color: #64748b !important;
+}
+
+#messagesView .chat-send-state {
+  font-weight: 700 !important;
+}
+
+#messagesView .chat-day-separator span {
+  background: rgba(226, 232, 240, 0.92) !important;
+  color: #475569 !important;
+  border: 1px solid rgba(148, 163, 184, 0.28) !important;
+}
+
+/* ===== Mobile chat side alignment hard-fix ===== */
+@media (max-width: 900px) {
+  #messagesView .chat-row {
+    display: flex !important;
+    width: 100% !important;
+    margin-bottom: 8px !important;
+  }
+
+  #messagesView .chat-row.is-me {
+    justify-content: flex-end !important;
+  }
+
+  #messagesView .chat-row.is-other {
+    justify-content: flex-start !important;
+  }
+
+  #messagesView .chat-row .chat-bubble {
+    width: fit-content !important;
+    max-width: min(82%, 360px) !important;
+    margin: 0 !important;
+  }
+
+  #messagesView .chat-row.is-me .chat-bubble {
+    margin-left: auto !important;
+    margin-right: 0 !important;
+  }
+
+  #messagesView .chat-row.is-other .chat-bubble {
+    margin-right: auto !important;
+    margin-left: 0 !important;
+  }
 }

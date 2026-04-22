@@ -4211,7 +4211,7 @@ function renderConversationDetails(conversation) {
 
     <div class="conversation-messages" id="conversationMessagesBox">
       ${(conversation.messages || []).map((message) => `
-        <div class="message-bubble ${message.senderId === state.user?.id ? "mine" : "other"}">
+        <div class="message-bubble ${isMessageFromCurrentUser(message) ? "mine" : "other"}">
           <div>${escapeHtml(message.body || "")}</div>
           <div class="message-meta">
             ${escapeHtml(message.senderName || "")} - ${message.createdAt ? new Date(message.createdAt).toLocaleString("ar") : ""}
@@ -4338,6 +4338,30 @@ function formatChatTime(value) {
   });
 }
 
+function isMessageFromCurrentUser(message) {
+  const currentUserId = Number(state.user?.id || 0);
+  const senderId = Number(
+    message?.senderId
+      ?? message?.sender_id
+      ?? message?.senderUserId
+      ?? message?.sender_user_id
+      ?? message?.userId
+      ?? message?.user_id
+      ?? 0
+  );
+  if (currentUserId > 0 && senderId > 0) {
+    return currentUserId === senderId;
+  }
+
+  const currentRole = String(state.user?.role || "").trim().toLowerCase();
+  const senderRole = String(message?.senderRole || message?.sender_role || "").trim().toLowerCase();
+  if (currentRole && senderRole) {
+    return currentRole === senderRole;
+  }
+
+  return false;
+}
+
 function renderConversationMessages(messages = []) {
   const items = Array.isArray(messages) ? messages : [];
   if (!items.length) return '<p class="muted">لا توجد رسائل.</p>';
@@ -4349,7 +4373,7 @@ function renderConversationMessages(messages = []) {
       ? `<div class="chat-day-separator"><span>${escapeHtml(formatChatDayLabel(message.createdAt))}</span></div>`
       : "";
     lastDayKey = dayKey || lastDayKey;
-    const isOwn = message.senderId === state.user?.id;
+    const isOwn = isMessageFromCurrentUser(message);
     const sendState = String(message.sendState || "").toLowerCase();
     const isPending = sendState === "pending";
     const isFailed = sendState === "failed";
@@ -4431,7 +4455,7 @@ function renderConversationDetails(conversation) {
 
       <div class="chat-thread whatsapp-thread">
         ${(conversation.messages || []).map((message) => `
-          <div class="chat-bubble ${message.senderId === state.user?.id ? "is-me" : "is-other"}">
+          <div class="chat-bubble ${isMessageFromCurrentUser(message) ? "is-me" : "is-other"}">
             <div class="chat-sender">${escapeHtml(message.senderName || "")}</div>
             <div class="chat-body">${escapeHtml(message.body || "")}</div>
             <div class="chat-time">${message.createdAt ? new Date(message.createdAt).toLocaleString("ar") : ""}</div>
@@ -4666,6 +4690,24 @@ async function loadNotifications() {
   }
 }
 
+function resolveNotificationTargetPath(notification) {
+  if (!notification || typeof notification !== "object") return "";
+
+  const rawLink = String(notification.linkUrl || "").trim();
+  const metadata = notification.metadata && typeof notification.metadata === "object"
+    ? notification.metadata
+    : {};
+  const conversationId = Number.parseInt(String(metadata.conversationId || ""), 10);
+
+  if ((notification.type === "message" || rawLink === "/messages")
+    && Number.isInteger(conversationId)
+    && conversationId > 0) {
+    return `/conversation/${conversationId}`;
+  }
+
+  return rawLink;
+}
+
 function renderNotifications() {
   if (!notificationsList) return;
   notificationsList.innerHTML = state.notifications.length
@@ -4677,7 +4719,7 @@ function renderNotifications() {
           </div>
           <div class="muted">${escapeHtml(item.body || "")}</div>
           <div class="notification-item-actions">
-            ${item.linkUrl ? `<a class="btn btn-light" href="${escapeHtml(item.linkUrl)}" data-route="${escapeHtml(item.linkUrl)}" data-open-notification="${item.id}">فتح</a>` : ""}
+            ${resolveNotificationTargetPath(item) ? `<a class="btn btn-light" href="${escapeHtml(resolveNotificationTargetPath(item))}" data-route="${escapeHtml(resolveNotificationTargetPath(item))}" data-open-notification="${item.id}">فتح</a>` : ""}
             ${item.isRead ? "" : `<button class="btn btn-outline" type="button" data-read-notification="${item.id}">تمت القراءة</button>`}
           </div>
         </div>
@@ -4772,6 +4814,38 @@ function getConversationPresenceLabel(conversation) {
 function getPrimaryLinkedOrder(conversation) {
   const linkedOrders = Array.isArray(conversation?.linkedOrders) ? conversation.linkedOrders : [];
   return linkedOrders[0] || null;
+}
+
+function getConversationOrderStateMeta(conversation) {
+  const order = getPrimaryLinkedOrder(conversation);
+  if (!order) return null;
+
+  const orderStatus = String(order.status || "").trim();
+  const currentUserId = Number(state.user?.id || 0);
+  const orderSellerId = Number(order.sellerId || 0);
+  const isSellerForOrder = currentUserId > 0 && orderSellerId > 0 && currentUserId === orderSellerId;
+
+  if (orderStatus === "cancelled") {
+    return {
+      label: "ملغي",
+      className: "status-order-cancelled"
+    };
+  }
+
+  if (orderStatus === "completed") {
+    return {
+      label: "مقبول",
+      className: "status-order-accepted"
+    };
+  }
+
+  if (orderStatus === "seller_confirmed") {
+    return isSellerForOrder
+      ? { label: "مقبول", className: "status-order-accepted" }
+      : { label: "بانتظار الاستلام", className: "status-order-awaiting" };
+  }
+
+  return null;
 }
 
 function renderConversationOrderSheet(conversation) {
@@ -4909,6 +4983,14 @@ async function handleConversationBackNavigation() {
 function createConversationCardMarkup(conversation, activeConversationId = null) {
   const otherPartyName = getConversationDisplayName(conversation);
   const initial = String(otherPartyName || "م").slice(0, 1);
+  const orderState = getConversationOrderStateMeta(conversation);
+  const lastMessageText = escapeHtml(conversation.lastMessage || "لا توجد رسائل بعد");
+  const footerStatusClass = orderState ? orderState.className : getConversationStatusClass(conversation.status);
+  const footerStatusLabel = orderState ? orderState.label : formatConversationStatus(conversation.status);
+  const tailState = orderState
+    ? `<span class="conversation-tail-label ${orderState.className}">${escapeHtml(orderState.label)}</span>`
+    : "";
+
   return `
     <button class="conversation-entry conversation-card ${activeConversationId === conversation.id ? "is-active active" : ""}" data-open-conversation="${conversation.id}" type="button">
       <div class="conversation-avatar conversation-avatar-pro">${escapeHtml(initial)}</div>
@@ -4921,9 +5003,9 @@ function createConversationCardMarkup(conversation, activeConversationId = null)
           <span class="conversation-product-chip">${escapeHtml(formatConversationType(conversation.conversationType))}</span>
           <strong>${escapeHtml(conversation.product?.name || "بدون منتج")}</strong>
         </div>
-        <div class="conversation-row-last">${escapeHtml(conversation.lastMessage || "لا توجد رسائل بعد")}</div>
+        <div class="conversation-row-last"><span class="conversation-last-text">${lastMessageText}</span>${tailState}</div>
         <div class="conversation-card-footer">
-          <div class="conversation-row-status ${getConversationStatusClass(conversation.status)}">${formatConversationStatus(conversation.status)}</div>
+          <div class="conversation-row-status ${footerStatusClass}">${footerStatusLabel}</div>
           <div class="conversation-meta-note">${conversation.lastMessageAt ? new Date(conversation.lastMessageAt).toLocaleTimeString("ar", { hour: "2-digit", minute: "2-digit" }) : "بدون تحديث"}</div>
         </div>
       </div>
@@ -7040,15 +7122,20 @@ function getOrderActionLabel(status) {
 
 function getAllowedOrderActions(order) {
   const actions = [];
-  const isSeller = state.user?.id === order.sellerId;
-  const isBuyer = state.user?.id === order.buyerId;
+  const currentUserId = Number(state.user?.id || 0);
+  const sellerId = Number(order?.sellerId || 0);
+  const buyerId = Number(order?.buyerId || 0);
+  const isSeller = currentUserId > 0 && sellerId > 0 && currentUserId === sellerId;
+  const isBuyer = currentUserId > 0 && buyerId > 0 && currentUserId === buyerId;
+  const buyerFallback = !isSeller && isBuyerUser();
+  const sellerFallback = !isBuyer && isSellerUser();
 
-  if (order.status === "submitted" && isSeller) {
+  if (order.status === "submitted" && (isSeller || sellerFallback)) {
     actions.push({ key: "seller_confirmed", label: getOrderActionLabel("seller_confirmed"), tone: "btn-primary" });
     actions.push({ key: "cancelled", label: "رفض الطلب", tone: "btn-outline" });
   }
 
-  if (order.status === "seller_confirmed" && isBuyer) {
+  if (order.status === "seller_confirmed" && (isBuyer || buyerFallback)) {
     actions.push({ key: "completed", label: getOrderActionLabel("completed"), tone: "btn-primary" });
     actions.push({ key: "cancelled", label: getOrderActionLabel("cancelled"), tone: "btn-outline" });
   }

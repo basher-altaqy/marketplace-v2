@@ -57,7 +57,7 @@ router.post('/api/conversations', authRequired, roleRequired('buyer'), async (re
       'message',
       'رسالة جديدة على منتجك',
       `وصلتك رسالة جديدة بخصوص المنتج: ${product.name}`,
-      '/messages',
+      `/conversation/${conversationId}`,
       { conversationId, productId: product.id }
     );
     await logSystemEvent('info', 'message', 'conversation created or updated', {
@@ -94,11 +94,27 @@ router.get('/api/conversations', authRequired, async (req, res, next) => {
            WHERE m.conversation_id = c.id
            ORDER BY m.created_at DESC, m.id DESC
            LIMIT 1
-         ) AS last_message
-       FROM conversations c
-       JOIN products p ON p.id = c.product_id
-       JOIN users s ON s.id = c.seller_id
-       JOIN users b ON b.id = c.buyer_id
+          ) AS last_message,
+          (
+            SELECT json_build_object(
+              'id', o.id,
+              'buyerId', o.buyer_id,
+              'sellerId', o.seller_id,
+              'status', o.status,
+              'sourceType', o.source_type,
+              'totalAmount', o.total_amount,
+              'createdAt', o.created_at,
+              'updatedAt', o.updated_at
+            )
+            FROM orders o
+            WHERE o.conversation_id = c.id
+            ORDER BY o.created_at DESC, o.id DESC
+            LIMIT 1
+          ) AS primary_order
+        FROM conversations c
+        JOIN products p ON p.id = c.product_id
+        JOIN users s ON s.id = c.seller_id
+        JOIN users b ON b.id = c.buyer_id
        WHERE (
          c.seller_id = $1 OR c.buyer_id = $1 OR EXISTS (
            SELECT 1 FROM users u WHERE u.id = $1 AND u.role = 'admin'
@@ -129,10 +145,20 @@ router.get('/api/conversations', authRequired, async (req, res, next) => {
           id: row.buyer_id,
           fullName: row.buyer_full_name
         },
-        lastMessage: row.last_message
-      }))
-    });
-  } catch (error) {
+        lastMessage: row.last_message,
+        linkedOrders: row.primary_order ? [{
+          id: Number(row.primary_order.id),
+          buyerId: Number(row.primary_order.buyerId),
+          sellerId: Number(row.primary_order.sellerId),
+          status: row.primary_order.status,
+          sourceType: row.primary_order.sourceType,
+          totalAmount: Number(row.primary_order.totalAmount || 0),
+          createdAt: row.primary_order.createdAt,
+          updatedAt: row.primary_order.updatedAt
+        }] : []
+       }))
+     });
+   } catch (error) {
     next(error);
   }
 });
@@ -209,7 +235,7 @@ router.post('/api/conversations/:id/messages', authRequired, async (req, res, ne
         'message',
         'New message',
         `You received a new message in conversation: ${conversation.product?.name || 'Product'}`,
-        '/messages',
+        `/conversation/${conversationId}`,
         { conversationId }
       );
     }
