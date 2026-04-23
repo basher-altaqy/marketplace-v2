@@ -23,13 +23,38 @@ const notificationsRoutes = require('./routes/notifications.routes');
 const pollRoutes = require('./routes/poll.routes');
 const pushRoutes = require('./routes/push.routes');
 
+function setPublicAssetCacheHeaders(res, filePath) {
+  const baseName = path.basename(filePath).toLowerCase();
+  const extension = path.extname(filePath).toLowerCase();
+
+  if (extension === '.html') {
+    res.setHeader('Cache-Control', 'no-cache, no-store, must-revalidate');
+    return;
+  }
+
+  if (baseName === 'sw.js' || baseName === 'manifest.webmanifest') {
+    res.setHeader('Cache-Control', 'no-cache, must-revalidate');
+    return;
+  }
+
+  if (['.css', '.js', '.mjs', '.png', '.jpg', '.jpeg', '.svg', '.webp', '.ico', '.woff', '.woff2', '.ttf'].includes(extension)) {
+    res.setHeader('Cache-Control', 'public, max-age=31536000, immutable');
+    return;
+  }
+
+  res.setHeader('Cache-Control', 'public, max-age=3600');
+}
+
 function createApp() {
   const app = express();
 
   app.use(express.json({ limit: '2mb' }));
   app.use(express.urlencoded({ extended: true }));
   app.use('/uploads', express.static(UPLOADS_DIR));
-  app.use(express.static(PUBLIC_DIR));
+  app.use(express.static(PUBLIC_DIR, {
+    etag: true,
+    setHeaders: setPublicAssetCacheHeaders
+  }));
 
   app.use(systemRoutes);
   app.use(authRoutes);
@@ -61,11 +86,13 @@ function createApp() {
   });
 
   app.get('/', (_req, res) => {
+    res.setHeader('Cache-Control', 'no-cache, no-store, must-revalidate');
     res.sendFile(path.join(PUBLIC_DIR, 'index.html'));
   });
 
   app.use((req, res, next) => {
     if (req.path.startsWith('/api/')) return next();
+    res.setHeader('Cache-Control', 'no-cache, no-store, must-revalidate');
     res.sendFile(path.join(PUBLIC_DIR, 'index.html'));
   });
 

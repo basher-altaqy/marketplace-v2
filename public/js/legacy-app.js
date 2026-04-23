@@ -50,9 +50,9 @@ const state = {
 
 const PUSH_PROMPT_STORAGE_KEY = "marketplacePushPromptStateV1";
 const PUSH_SERVICE_WORKER_PATH = "/sw.js";
+const SERVICE_WORKER_SUPPORTED = typeof window !== "undefined" && "serviceWorker" in navigator;
 const PUSH_SUPPORTED =
-  typeof window !== "undefined"
-  && "serviceWorker" in navigator
+  SERVICE_WORKER_SUPPORTED
   && "Notification" in window
   && "PushManager" in window;
 
@@ -102,7 +102,9 @@ state.pushRuntime = state.pushRuntime || {
   registrationPromise: null,
   subscribePromise: null,
   vapidPublicKey: "",
-  isSubscribed: false
+  isSubscribed: false,
+  updatePromptVisible: false,
+  isReloadingForUpdate: false
 };
 
 const V1_FLAGS = {
@@ -967,33 +969,47 @@ function api(path, options = {}) {
     window.marketplacePoller.notifyApiRequest(path);
   }
 
-  return fetch(path, { ...options, headers }).then(async (res) => {
-    const contentType = res.headers.get("content-type") || "";
-    const data = contentType.includes("application/json")
-      ? await res.json()
-      : await res.text();
+  return fetch(path, { ...options, headers })
+    .then(async (res) => {
+      const contentType = res.headers.get("content-type") || "";
+      const data = contentType.includes("application/json")
+        ? await res.json()
+        : await res.text();
 
-    if (!res.ok) {
-      const fallbackMessageByStatus = {
-        400: "تعذر تنفيذ الطلب. تحقق من البيانات وأعد المحاولة.",
-        401: "يجب تسجيل الدخول أولاً للمتابعة.",
-        403: "ليست لديك صلاحية لتنفيذ هذا الإجراء.",
-        404: "الخدمة المطلوبة غير متاحة حالياً.",
-        500: "حدث خطأ داخلي في الخادم. حاول مرة أخرى بعد قليل."
-      };
-      const plainText = typeof data === "string"
-        ? data.replace(/<[^>]*>/g, " ").replace(/\s+/g, " ").trim()
-        : "";
-      const message =
-        (data && typeof data === "object" && data.error) ||
-        (plainText && plainText !== "[object Object]" ? plainText : "") ||
-        fallbackMessageByStatus[res.status] ||
-        `Request failed (${res.status})`;
-      throw new Error(message);
-    }
+      if (!res.ok) {
+        const fallbackMessageByStatus = {
+          400: "تعذر تنفيذ الطلب. تحقق من البيانات وأعد المحاولة.",
+          401: "يجب تسجيل الدخول أولاً للمتابعة.",
+          403: "ليست لديك صلاحية لتنفيذ هذا الإجراء.",
+          404: "الخدمة المطلوبة غير متاحة حالياً.",
+          500: "حدث خطأ داخلي في الخادم. حاول مرة أخرى بعد قليل."
+        };
+        const plainText = typeof data === "string"
+          ? data.replace(/<[^>]*>/g, " ").replace(/\s+/g, " ").trim()
+          : "";
+        const message =
+          (data && typeof data === "object" && data.error) ||
+          (plainText && plainText !== "[object Object]" ? plainText : "") ||
+          fallbackMessageByStatus[res.status] ||
+          `Request failed (${res.status})`;
+        throw new Error(message);
+      }
 
-    return data;
-  });
+      return data;
+    })
+    .catch((error) => {
+      const message = String(error?.message || "");
+      const isOfflineError =
+        !navigator.onLine
+        || message.toLowerCase() === "failed to fetch"
+        || message.toLowerCase().includes("networkerror");
+
+      if (isOfflineError) {
+        throw new Error("لا يوجد اتصال إنترنت حاليًا. الواجهة تعمل محليًا لكن هذه البيانات تحتاج اتصال.");
+      }
+
+      throw error;
+    });
 }
 
 function setAuth(authData) {
@@ -2099,13 +2115,31 @@ function toUint8ArrayFromBase64(base64Value = "") {
 }
 
 async function registerPushServiceWorker() {
-  if (!PUSH_SUPPORTED) return null;
+  if (!SERVICE_WORKER_SUPPORTED) return null;
   if (state.pushRuntime.registrationPromise) return state.pushRuntime.registrationPromise;
 
   state.pushRuntime.registrationPromise = navigator.serviceWorker.register(PUSH_SERVICE_WORKER_PATH)
-    .then((registration) => registration)
+    .then((registration) => {
+      const promptUpdateIfWaiting = (nextRegistration) => {
+        if (nextRegistration?.waiting) {
+          showServiceWorkerUpdatePrompt(nextRegistration);
+        }
+      };
+
+      promptUpdateIfWaiting(registration);
+      registration.addEventListener("updatefound", () => {
+        const installing = registration.installing;
+        if (!installing) return;
+        installing.addEventListener("statechange", () => {
+          if (installing.state === "installed" && navigator.serviceWorker.controller) {
+            showServiceWorkerUpdatePrompt(registration);
+          }
+        });
+      });
+      return registration;
+    })
     .catch((error) => {
-      console.debug("[push] service worker registration failed", error?.message || error);
+      console.debug("[sw] registration failed", error?.message || error);
       return null;
     })
     .finally(() => {
@@ -2113,6 +2147,49 @@ async function registerPushServiceWorker() {
     });
 
   return state.pushRuntime.registrationPromise;
+}
+
+function removeServiceWorkerUpdatePrompt() {
+  const banner = document.getElementById("swUpdateBanner");
+  banner?.remove();
+  state.pushRuntime.updatePromptVisible = false;
+}
+
+function showServiceWorkerUpdatePrompt(registration) {
+  if (!registration?.waiting || state.pushRuntime.updatePromptVisible) return;
+
+  state.pushRuntime.updatePromptVisible = true;
+  const existing = document.getElementById("swUpdateBanner");
+  if (existing) existing.remove();
+
+  const banner = document.createElement("div");
+  banner.id = "swUpdateBanner";
+  banner.setAttribute("role", "status");
+  banner.style.position = "fixed";
+  banner.style.left = "16px";
+  banner.style.right = "16px";
+  banner.style.bottom = "16px";
+  banner.style.zIndex = "1600";
+  banner.style.background = "#0f172a";
+  banner.style.color = "#ffffff";
+  banner.style.borderRadius = "14px";
+  banner.style.padding = "12px 14px";
+  banner.style.display = "flex";
+  banner.style.alignItems = "center";
+  banner.style.justifyContent = "space-between";
+  banner.style.gap = "10px";
+  banner.style.boxShadow = "0 16px 36px rgba(15, 23, 42, 0.35)";
+  banner.innerHTML = `
+    <span style="font-size:13px;font-weight:700;">يوجد تحديث جديد للتطبيق.</span>
+    <button id="swUpdateNowBtn" type="button" style="border:0;border-radius:10px;padding:8px 12px;background:#22c55e;color:#052e16;font-weight:800;cursor:pointer;">تحديث الآن</button>
+  `;
+
+  document.body.appendChild(banner);
+
+  document.getElementById("swUpdateNowBtn")?.addEventListener("click", () => {
+    state.pushRuntime.isReloadingForUpdate = true;
+    registration.waiting?.postMessage({ type: "SKIP_WAITING" });
+  });
 }
 
 async function getPushVapidPublicKey() {
@@ -2304,16 +2381,29 @@ async function requestContextualPushPermission(trigger = "general") {
   }
 }
 
-if (PUSH_SUPPORTED) {
+if (SERVICE_WORKER_SUPPORTED) {
   navigator.serviceWorker.addEventListener("message", (event) => {
-    const targetUrl = String(event?.data?.targetUrl || "");
-    if (!targetUrl) return;
-    const path = new URL(targetUrl, window.location.origin).pathname;
-    if (typeof window.navigateTo === "function") {
-      window.navigateTo(path).catch(() => {});
+    const eventType = String(event?.data?.type || "").trim();
+    if (eventType === "APP_UPDATE_AVAILABLE") {
+      registerPushServiceWorker().catch(() => {});
       return;
     }
-    window.location.href = path;
+
+    if (eventType === "push:open") {
+      const targetUrl = String(event?.data?.targetUrl || "");
+      if (!targetUrl) return;
+      const path = new URL(targetUrl, window.location.origin).pathname;
+      if (typeof window.navigateTo === "function") {
+        window.navigateTo(path).catch(() => {});
+        return;
+      }
+      window.location.href = path;
+    }
+  });
+
+  navigator.serviceWorker.addEventListener("controllerchange", () => {
+    if (!state.pushRuntime.isReloadingForUpdate) return;
+    window.location.reload();
   });
 }
 
@@ -7959,6 +8049,9 @@ window.marketplacePoller = {
 };
 
 bootstrapPromise.finally(() => {
+  if (SERVICE_WORKER_SUPPORTED) {
+    registerPushServiceWorker().catch(() => {});
+  }
   if (state.user && state.token) {
     window.marketplacePoller.start();
     if (PUSH_SUPPORTED && Notification.permission === "granted") {

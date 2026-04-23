@@ -1,0 +1,25 @@
+{
+  "name": "بضاعة بلدي",
+  "short_name": "بضاعة بلدي",
+  "description": "منصة سوق محلي بواجهة حديثة وتجربة تصفح سلسة.",
+  "start_url": "/",
+  "scope": "/",
+  "display": "standalone",
+  "background_color": "#f6f8fb",
+  "theme_color": "#2b5e3b",
+  "lang": "ar",
+  "dir": "rtl",
+  "icons": [
+    {
+      "src": "/favicon.ico",
+      "sizes": "16x16 32x32 48x48",
+      "type": "image/x-icon"
+    },
+    {
+      "src": "/assets/site/topbar-logo.jpg",
+      "sizes": "192x192",
+      "type": "image/jpeg",
+      "purpose": "any"
+    }
+  ]
+}
