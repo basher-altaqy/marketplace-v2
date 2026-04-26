@@ -3,6 +3,11 @@
   const ADMIN_KEY = 'adminUser';
   const DRAGON_KEY = 'dragonEffectEnabled';
   const DRAGON_EFFECT_TEMPORARILY_DISABLED = true;
+  const HOME_AD_SLOT_OPTIONS = [
+    { slot: 'top_1', label: 'العلوي 1' },
+    { slot: 'top_2', label: 'العلوي 2' },
+    { slot: 'bottom', label: 'السفلي' }
+  ];
   const SECTION_TITLES = {
     overview: {
       title: 'نظرة عامة',
@@ -28,6 +33,10 @@
       title: 'المحتوى الثابت',
       subtitle: 'إدارة نصوص الشركة والسياسات ومعلومات التواصل والأسئلة الشائعة.'
     },
+    homeAds: {
+      title: 'إعلانات الرئيسية',
+      subtitle: 'إدارة إعلانين علويين وإعلان سفلي من شاشة واحدة.'
+    },
     support: {
       title: 'الدعم الفني',
       subtitle: 'متابعة محادثات الدعم الفني والرد عليها وتحديث حالتها.'
@@ -52,6 +61,9 @@
     reports: [],
     conversations: [],
     content: [],
+    homeAds: { top: [], bottom: null, slots: {} },
+    homeAdsSelectedSlot: 'top_1',
+    homeAdsUploadedImage: '',
     support: [],
     systemStatus: null,
     activity: []
@@ -90,6 +102,17 @@
     conversationsMeta: document.getElementById('conversationsMeta'),
     conversationsTableWrap: document.getElementById('conversationsTableWrap'),
     contentTableWrap: document.getElementById('contentTableWrap'),
+    homeAdsEditorForm: document.getElementById('homeAdsEditorForm'),
+    homeAdsSlotSelect: document.getElementById('homeAdsSlotSelect'),
+    homeAdsSlotStatus: document.getElementById('homeAdsSlotStatus'),
+    homeAdsTitleInput: document.getElementById('homeAdsTitleInput'),
+    homeAdsSubtitleInput: document.getElementById('homeAdsSubtitleInput'),
+    homeAdsImageInput: document.getElementById('homeAdsImageInput'),
+    homeAdsLinkInput: document.getElementById('homeAdsLinkInput'),
+    homeAdsImageUploadInput: document.getElementById('homeAdsImageUploadInput'),
+    homeAdsImageUploadBtn: document.getElementById('homeAdsImageUploadBtn'),
+    homeAdsUploadHint: document.getElementById('homeAdsUploadHint'),
+    homeAdsPreviewGrid: document.getElementById('homeAdsPreviewGrid'),
     supportStatusFilter: document.getElementById('supportStatusFilter'),
     supportMeta: document.getElementById('supportMeta'),
     supportTableWrap: document.getElementById('supportTableWrap'),
@@ -184,10 +207,11 @@
   }
 
   async function adminApi(path, options) {
+    const isFormData = options && options.body instanceof FormData;
     const response = await fetch(path, {
       ...(options || {}),
       headers: {
-        'Content-Type': 'application/json',
+        ...(isFormData ? {} : { 'Content-Type': 'application/json' }),
         ...(options && options.headers ? options.headers : {}),
         Authorization: 'Bearer ' + getToken()
       }
@@ -216,8 +240,12 @@
 
   function setIdentity(admin) {
     const source = admin || state.admin || {};
-    elements.identity.textContent = source.fullName || 'مدير النظام';
-    elements.identityRole.textContent = source.role === 'admin' ? 'مدير النظام' : (source.role || 'إدارة المنصة');
+    if (elements.identity) {
+      elements.identity.textContent = source.fullName || 'مدير النظام';
+    }
+    if (elements.identityRole) {
+      elements.identityRole.textContent = source.role === 'admin' ? 'مدير النظام' : (source.role || 'إدارة المنصة');
+    }
   }
 
   function closeSidebar() {
@@ -228,6 +256,12 @@
   function openSidebar() {
     elements.sidebar.classList.add('is-open');
     elements.overlay.classList.add('visible');
+  }
+
+  function syncSidebarForViewport() {
+    if (window.innerWidth > 980) {
+      closeSidebar();
+    }
   }
 
   function setSection(section) {
@@ -503,6 +537,200 @@
       button.addEventListener('click', function () {
         openContentEditor(button.getAttribute('data-content-edit'));
       });
+    });
+  }
+
+  function normalizeHomeAdEntry(slot, value) {
+    const raw = value && typeof value === 'object' ? value : {};
+    const title = String(raw.title || '').trim();
+    const subtitle = String(raw.subtitle || '').trim();
+    const imageCandidate = String(raw.image || '').trim();
+    const linkCandidate = String(raw.link || '').trim();
+
+    const image = (imageCandidate.startsWith('/') || /^https?:\/\//i.test(imageCandidate))
+      ? imageCandidate
+      : '';
+
+    let link = null;
+    const linkLower = linkCandidate.toLowerCase();
+    if (linkCandidate && linkLower !== 'none' && linkCandidate !== '#' && (linkCandidate.startsWith('/') || /^https?:\/\//i.test(linkCandidate))) {
+      link = linkCandidate;
+    }
+
+    return {
+      slot: slot,
+      title: title,
+      subtitle: subtitle,
+      image: image,
+      link: link,
+      isVisible: Boolean(title && image)
+    };
+  }
+
+  function normalizeHomeAdsPayload(payload) {
+    const slots = {};
+    HOME_AD_SLOT_OPTIONS.forEach(function (item) {
+      slots[item.slot] = normalizeHomeAdEntry(item.slot, null);
+    });
+
+    if (payload && payload.slots && typeof payload.slots === 'object') {
+      HOME_AD_SLOT_OPTIONS.forEach(function (item) {
+        if (payload.slots[item.slot]) {
+          slots[item.slot] = normalizeHomeAdEntry(item.slot, payload.slots[item.slot]);
+        }
+      });
+    }
+
+    if (Array.isArray(payload && payload.top)) {
+      payload.top.forEach(function (item) {
+        if (!item || !item.slot || !slots[item.slot]) return;
+        slots[item.slot] = normalizeHomeAdEntry(item.slot, item);
+      });
+    }
+
+    if (payload && payload.bottom) {
+      slots.bottom = normalizeHomeAdEntry('bottom', payload.bottom);
+    }
+
+    return {
+      top: [slots.top_1, slots.top_2].filter(Boolean),
+      bottom: slots.bottom || null,
+      slots: slots
+    };
+  }
+
+  function renderHomeAdsPreviewCard(entry, fallbackTitle) {
+    if (!entry || !entry.isVisible) {
+      return '<article class="home-ads-preview-item"><div class="home-ads-preview-head"><strong>' + escapeHtml(fallbackTitle) + '</strong><span class="badge neutral">مخفي</span></div><div class="home-ads-preview-image-placeholder">لا يوجد محتوى جاهز للعرض</div></article>';
+    }
+
+    return '<article class="home-ads-preview-item">' +
+      '<div class="home-ads-preview-head"><strong>' + escapeHtml(fallbackTitle) + '</strong><span class="badge success">مرئي</span></div>' +
+      '<div class="home-ads-preview-media">' +
+        '<img class="home-ads-preview-image" src="' + escapeHtml(entry.image) + '" alt="' + escapeHtml(entry.title || fallbackTitle) + '" loading="lazy" />' +
+      '</div>' +
+      '<div class="home-ads-preview-copy">' +
+        '<div class="home-ads-preview-title">' + escapeHtml(entry.title) + '</div>' +
+        '<div class="home-ads-preview-subtitle">' + escapeHtml(entry.subtitle || 'بدون عنوان فرعي') + '</div>' +
+        '<div class="home-ads-preview-link">' + escapeHtml(entry.link || 'بدون رابط قابل للنقر') + '</div>' +
+      '</div>' +
+    '</article>';
+  }
+
+  function renderHomeAdsEditor() {
+    if (!elements.homeAdsSlotSelect || !elements.homeAdsTitleInput || !elements.homeAdsPreviewGrid) {
+      return;
+    }
+
+    const selectedSlot = elements.homeAdsSlotSelect.value || state.homeAdsSelectedSlot || 'top_1';
+    state.homeAdsSelectedSlot = selectedSlot;
+
+    const entry = state.homeAds && state.homeAds.slots
+      ? (state.homeAds.slots[selectedSlot] || normalizeHomeAdEntry(selectedSlot, null))
+      : normalizeHomeAdEntry(selectedSlot, null);
+
+    elements.homeAdsTitleInput.value = entry.title || '';
+    elements.homeAdsSubtitleInput.value = entry.subtitle || '';
+    elements.homeAdsImageInput.value = state.homeAdsUploadedImage || entry.image || '';
+    elements.homeAdsLinkInput.value = entry.link || '';
+
+    if (elements.homeAdsSlotStatus) {
+      elements.homeAdsSlotStatus.textContent = entry.isVisible
+        ? 'الحالة الحالية: مرئي في الصفحة الرئيسية.'
+        : 'الحالة الحالية: مخفي (يجب وجود عنوان + صورة).';
+    }
+
+    if (elements.homeAdsUploadHint && state.homeAdsUploadedImage) {
+      elements.homeAdsUploadHint.textContent = 'تم رفع صورة جديدة لهذا الموقع. سيتم اعتمادها عند الحفظ.';
+    }
+
+    const top1 = state.homeAds && state.homeAds.slots ? state.homeAds.slots.top_1 : null;
+    const top2 = state.homeAds && state.homeAds.slots ? state.homeAds.slots.top_2 : null;
+    const bottom = state.homeAds && state.homeAds.slots ? state.homeAds.slots.bottom : null;
+
+    elements.homeAdsPreviewGrid.innerHTML =
+      renderHomeAdsPreviewCard(top1, 'الإعلان العلوي 1') +
+      renderHomeAdsPreviewCard(top2, 'الإعلان العلوي 2') +
+      renderHomeAdsPreviewCard(bottom, 'الإعلان السفلي');
+  }
+
+  function bindHomeAdsHandlers() {
+    if (!elements.homeAdsEditorForm || !elements.homeAdsSlotSelect || elements.homeAdsEditorForm.dataset.bound === '1') {
+      return;
+    }
+    elements.homeAdsEditorForm.dataset.bound = '1';
+
+    elements.homeAdsSlotSelect.addEventListener('change', function () {
+      state.homeAdsUploadedImage = '';
+      if (elements.homeAdsUploadHint) {
+        elements.homeAdsUploadHint.textContent = 'عند وجود صورة مرفوعة + رابط صورة، يتم اعتماد الصورة المرفوعة.';
+      }
+      renderHomeAdsEditor();
+    });
+
+    if (elements.homeAdsImageUploadBtn) {
+      elements.homeAdsImageUploadBtn.addEventListener('click', async function () {
+        const file = elements.homeAdsImageUploadInput && elements.homeAdsImageUploadInput.files ? elements.homeAdsImageUploadInput.files[0] : null;
+        if (!file) {
+          if (elements.homeAdsUploadHint) elements.homeAdsUploadHint.textContent = 'اختر صورة قبل الرفع.';
+          return;
+        }
+
+        const formData = new FormData();
+        formData.append('image', file);
+        elements.homeAdsImageUploadBtn.disabled = true;
+        elements.homeAdsImageUploadBtn.textContent = 'جارٍ الرفع...';
+
+        try {
+          const result = await adminApi('/api/admin/content/upload-image', {
+            method: 'POST',
+            body: formData
+          });
+          const imageUrl = String(result && result.url ? result.url : '').trim();
+          if (!imageUrl) {
+            throw new Error('لم يتم استلام رابط الصورة بعد الرفع.');
+          }
+          state.homeAdsUploadedImage = imageUrl;
+          elements.homeAdsImageInput.value = imageUrl;
+          if (elements.homeAdsUploadHint) elements.homeAdsUploadHint.textContent = 'تم رفع الصورة بنجاح. اضغط حفظ لتطبيقها.';
+        } catch (error) {
+          if (elements.homeAdsUploadHint) elements.homeAdsUploadHint.textContent = error.message || 'تعذر رفع الصورة.';
+        } finally {
+          elements.homeAdsImageUploadBtn.disabled = false;
+          elements.homeAdsImageUploadBtn.textContent = 'رفع الصورة';
+        }
+      });
+    }
+
+    elements.homeAdsEditorForm.addEventListener('submit', async function (event) {
+      event.preventDefault();
+      const slot = elements.homeAdsSlotSelect.value || 'top_1';
+      const payload = {
+        title: String(elements.homeAdsTitleInput.value || '').trim(),
+        subtitle: String(elements.homeAdsSubtitleInput.value || '').trim(),
+        image: String(elements.homeAdsImageInput.value || '').trim(),
+        link: String(elements.homeAdsLinkInput.value || '').trim()
+      };
+
+      if (state.homeAdsUploadedImage) {
+        payload.image = state.homeAdsUploadedImage;
+      }
+
+      try {
+        const result = await adminApi('/api/admin/home-ads/' + encodeURIComponent(slot), {
+          method: 'PUT',
+          body: JSON.stringify(payload)
+        });
+        state.homeAds = normalizeHomeAdsPayload(result.homeAds || {});
+        state.homeAdsUploadedImage = '';
+        if (elements.homeAdsUploadHint) {
+          elements.homeAdsUploadHint.textContent = 'تم الحفظ بنجاح.';
+        }
+        showMessage('تم حفظ إعدادات الإعلان بنجاح.', 'success');
+        renderHomeAdsEditor();
+      } catch (error) {
+        showMessage(error.message, 'error');
+      }
     });
   }
 
@@ -885,6 +1113,14 @@
     if (updateTime !== false) setLastUpdated();
   }
 
+  async function loadHomeAdsSection(updateTime) {
+    renderSectionLoading('homeAds');
+    const data = await adminApi('/api/admin/home-ads?t=' + Date.now());
+    state.homeAds = normalizeHomeAdsPayload(data.homeAds || {});
+    renderHomeAdsEditor();
+    if (updateTime !== false) setLastUpdated();
+  }
+
   async function loadSupport(updateTime) {
     const selectedStatus = elements.supportStatusFilter ? elements.supportStatusFilter.value : 'all';
     const data = await adminApi('/api/admin/support?status=' + encodeURIComponent(selectedStatus));
@@ -915,6 +1151,7 @@
     if (state.currentSection === 'reports') return loadReports(true);
     if (state.currentSection === 'conversations') return loadConversations(true);
     if (state.currentSection === 'content') return loadContentSection(true);
+    if (state.currentSection === 'homeAds') return loadHomeAdsSection(true);
     if (state.currentSection === 'support') return loadSupport(true);
     if (state.currentSection === 'system') return loadSystemStatus(true);
     if (state.currentSection === 'activity') return loadActivity(true);
@@ -950,7 +1187,9 @@
   function bindUI() {
     elements.sidebarToggleBtn.addEventListener('click', openSidebar);
     elements.overlay.addEventListener('click', closeSidebar);
+    window.addEventListener('resize', syncSidebarForViewport);
     elements.closeModalBtn.addEventListener('click', closeModal);
+    bindHomeAdsHandlers();
     renderDragonEffectControl();
     elements.dragonEffectToggleBtn.addEventListener('click', function () {
       setDragonEffectEnabled(!state.dragonEffectEnabled);
@@ -1156,6 +1395,15 @@
       elements.contentTableWrap.innerHTML = renderLoadingState('جاري تحميل المحتوى الثابت...');
     }
 
+    if (section === 'homeAds') {
+      if (elements.homeAdsPreviewGrid) {
+        elements.homeAdsPreviewGrid.innerHTML = renderLoadingState('جاري تحميل بيانات إعلانات الرئيسية...');
+      }
+      if (elements.homeAdsSlotStatus) {
+        elements.homeAdsSlotStatus.textContent = 'جاري تحميل بيانات الموقع المختار...';
+      }
+    }
+
     if (section === 'support') {
       if (elements.supportTableWrap) {
         elements.supportTableWrap.innerHTML = renderLoadingState('جاري تحميل محادثات الدعم...');
@@ -1180,10 +1428,11 @@
 
   async function adminApi(path, options) {
     try {
+      const isFormData = options && options.body instanceof FormData;
       const response = await fetch(path, {
         ...(options || {}),
         headers: {
-          'Content-Type': 'application/json',
+          ...(isFormData ? {} : { 'Content-Type': 'application/json' }),
           ...(options && options.headers ? options.headers : {}),
           Authorization: 'Bearer ' + getToken()
         }
@@ -1218,6 +1467,14 @@
     const data = await adminApi('/api/admin/content');
     state.content = data.content || [];
     renderContent();
+    if (updateTime !== false) setLastUpdated();
+  }
+
+  async function loadHomeAdsSection(updateTime) {
+    renderSectionLoading('homeAds');
+    const data = await adminApi('/api/admin/home-ads?t=' + Date.now());
+    state.homeAds = normalizeHomeAdsPayload(data.homeAds || {});
+    renderHomeAdsEditor();
     if (updateTime !== false) setLastUpdated();
   }
 
@@ -1259,6 +1516,7 @@
       if (state.currentSection === 'reports') return loadReports(true);
       if (state.currentSection === 'conversations') return loadConversations(true);
       if (state.currentSection === 'content') return loadContentSection(true);
+      if (state.currentSection === 'homeAds') return loadHomeAdsSection(true);
       if (state.currentSection === 'support') return loadSupport(true);
       if (state.currentSection === 'system') return loadSystemStatus(true);
       if (state.currentSection === 'activity') return loadActivity(true);
@@ -1291,6 +1549,7 @@
     bindFilters();
     bindNavigation();
     bindUI();
+    syncSidebarForViewport();
     setSection('overview');
 
     try {

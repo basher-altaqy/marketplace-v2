@@ -1,6 +1,7 @@
 const express = require('express');
+const compression = require('compression');
 const path = require('path');
-const { PUBLIC_DIR, UPLOADS_DIR } = require('./config/env');
+const { PUBLIC_DIR, UPLOADS_DIR, NODE_ENV } = require('./config/env');
 const { query } = require('./services/marketplace.service');
 const { assertDatabaseReady } = require('./services/bootstrap.service');
 const { ensurePlatformSupport } = require('./services/platform.service');
@@ -24,6 +25,11 @@ const pollRoutes = require('./routes/poll.routes');
 const pushRoutes = require('./routes/push.routes');
 
 function setPublicAssetCacheHeaders(res, filePath) {
+  if (NODE_ENV !== 'production') {
+    res.setHeader('Cache-Control', 'no-cache, no-store, must-revalidate');
+    return;
+  }
+
   const baseName = path.basename(filePath).toLowerCase();
   const extension = path.extname(filePath).toLowerCase();
 
@@ -37,7 +43,12 @@ function setPublicAssetCacheHeaders(res, filePath) {
     return;
   }
 
-  if (['.css', '.js', '.mjs', '.png', '.jpg', '.jpeg', '.svg', '.webp', '.ico', '.woff', '.woff2', '.ttf'].includes(extension)) {
+  if (['.css', '.js', '.mjs'].includes(extension)) {
+    res.setHeader('Cache-Control', 'no-cache, must-revalidate');
+    return;
+  }
+
+  if (['.png', '.jpg', '.jpeg', '.svg', '.webp', '.ico', '.woff', '.woff2', '.ttf'].includes(extension)) {
     res.setHeader('Cache-Control', 'public, max-age=31536000, immutable');
     return;
   }
@@ -48,6 +59,7 @@ function setPublicAssetCacheHeaders(res, filePath) {
 function createApp() {
   const app = express();
 
+  app.use(compression());
   app.use(express.json({ limit: '2mb' }));
   app.use(express.urlencoded({ extended: true }));
   app.use('/uploads', express.static(UPLOADS_DIR));

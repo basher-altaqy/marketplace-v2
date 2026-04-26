@@ -109,3 +109,15 @@
 - Rating behavior:
   - rating is still one-time only.
   - rating is allowed after `closed` or `cancelled` status.
+
+## Home Ads Slots Update - 2026-04-24
+- The home screen now uses 3 managed ad slots:
+  - top slot #1 (horizontal)
+  - top slot #2 (horizontal)
+  - bottom slot after product cards (horizontal)
+- Ad content is managed from Admin > Static Content, without adding a new admin screen.
+- Keys used for each ad:
+  - `home_top_ad_1_title`, `home_top_ad_1_subtitle`, `home_top_ad_1_image`, `home_top_ad_1_link`
+  - `home_top_ad_2_title`, `home_top_ad_2_subtitle`, `home_top_ad_2_image`, `home_top_ad_2_link`
+  - `home_bottom_ad_title`, `home_bottom_ad_subtitle`, `home_bottom_ad_image`, `home_bottom_ad_link`
+- Visual ratio target for desktop banners is `8:3` (`800x300` recommended).

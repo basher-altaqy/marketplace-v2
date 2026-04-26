@@ -118,3 +118,15 @@
   - `cancelled` closes conversation with `status=cancelled`
 - Once an order conversation reaches `closed` or `cancelled`, it is final and cannot be reopened.
 - Rating remains one-time per conversation, and is now allowed after `closed` **or** `cancelled`.
+
+## Homepage Ads (Admin-managed)
+- The home page now has 3 ad slots:
+  - 2 top horizontal ads (under the search area)
+  - 1 bottom horizontal ad (after product cards)
+- Manage ads from: `http://localhost:3000/admin/admin.html` -> `المحتوى الثابت`.
+- Use these `site_content` keys:
+  - `home_top_ad_1_title`, `home_top_ad_1_subtitle`, `home_top_ad_1_image`, `home_top_ad_1_link`
+  - `home_top_ad_2_title`, `home_top_ad_2_subtitle`, `home_top_ad_2_image`, `home_top_ad_2_link`
+  - `home_bottom_ad_title`, `home_bottom_ad_subtitle`, `home_bottom_ad_image`, `home_bottom_ad_link`
+- Recommended banner ratio is `8:3` (for example `800x300`).
+- If link should be disabled, set the corresponding `*_link` value to `none`.

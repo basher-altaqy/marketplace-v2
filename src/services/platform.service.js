@@ -16,6 +16,25 @@ const APP_LOG_FILE = path.join(LOGS_DIR, 'application.log');
 const BACKUP_SCRIPT_PATH = path.join(ROOT_DIR, 'scripts', 'db-backup.ps1');
 const PUSH_EVENTS_ENABLED = new Set(['message', 'order']);
 let webPushClientCache;
+const HOME_AD_SLOT_DEFINITIONS = {
+  top_1: {
+    slot: 'top_1',
+    keyPrefix: 'home_top_ad_1_',
+    titlePrefix: 'Home Top Ad 1'
+  },
+  top_2: {
+    slot: 'top_2',
+    keyPrefix: 'home_top_ad_2_',
+    titlePrefix: 'Home Top Ad 2'
+  },
+  bottom: {
+    slot: 'bottom',
+    keyPrefix: 'home_bottom_ad_',
+    titlePrefix: 'Home Bottom Ad'
+  }
+};
+const HOME_AD_SLOT_ORDER = ['top_1', 'top_2', 'bottom'];
+const HOME_AD_FIELDS = ['title', 'subtitle', 'image', 'link'];
 const DEFAULT_CONTENT = [
   {
     key: 'about_company',
@@ -56,6 +75,66 @@ const DEFAULT_CONTENT = [
     key: 'home_hero_image',
     title: 'صورة الواجهة العليا',
     content: '/assets/site/black-gold-marble-reference.jpg'
+  },
+  {
+    key: 'home_top_ad_1_title',
+    title: 'Home Top Ad 1 Title',
+    content: 'إعلان علوي 1'
+  },
+  {
+    key: 'home_top_ad_1_subtitle',
+    title: 'Home Top Ad 1 Subtitle',
+    content: 'عدّل النص من لوحة الإدارة لإظهار عرضك الأول'
+  },
+  {
+    key: 'home_top_ad_1_image',
+    title: 'Home Top Ad 1 Image',
+    content: '/assets/site/black-gold-marble-reference.jpg'
+  },
+  {
+    key: 'home_top_ad_1_link',
+    title: 'Home Top Ad 1 Link',
+    content: 'none'
+  },
+  {
+    key: 'home_top_ad_2_title',
+    title: 'Home Top Ad 2 Title',
+    content: 'إعلان علوي 2'
+  },
+  {
+    key: 'home_top_ad_2_subtitle',
+    title: 'Home Top Ad 2 Subtitle',
+    content: 'عدّل النص من لوحة الإدارة لإظهار عرضك الثاني'
+  },
+  {
+    key: 'home_top_ad_2_image',
+    title: 'Home Top Ad 2 Image',
+    content: '/assets/site/black-gold-marble-reference.jpg'
+  },
+  {
+    key: 'home_top_ad_2_link',
+    title: 'Home Top Ad 2 Link',
+    content: 'none'
+  },
+  {
+    key: 'home_bottom_ad_title',
+    title: 'Home Bottom Ad Title',
+    content: 'إعلان أسفل المنتجات'
+  },
+  {
+    key: 'home_bottom_ad_subtitle',
+    title: 'Home Bottom Ad Subtitle',
+    content: 'يمكن عرض إعلان إضافي أسفل بطاقات المنتجات مباشرة'
+  },
+  {
+    key: 'home_bottom_ad_image',
+    title: 'Home Bottom Ad Image',
+    content: '/assets/site/black-gold-marble-reference.jpg'
+  },
+  {
+    key: 'home_bottom_ad_link',
+    title: 'Home Bottom Ad Link',
+    content: 'none'
   }
 ];
 
@@ -152,6 +231,65 @@ function summarizePushEndpoint(endpoint) {
   if (!safe) return '';
   if (safe.length <= 80) return safe;
   return `${safe.slice(0, 38)}...${safe.slice(-32)}`;
+}
+
+function sanitizeHomeAdText(value, maxLength = 1200) {
+  return String(value || '').trim().slice(0, maxLength);
+}
+
+function normalizeHomeAdImageForResponse(value) {
+  const raw = sanitizeHomeAdText(value, 2048);
+  if (!raw) return '';
+  const fixedTypo = raw.replace(/^\/?ssets\//i, '/assets/');
+  if (/^(https?:)?\/\//i.test(fixedTypo) || fixedTypo.startsWith('/')) return fixedTypo;
+  return '/' + fixedTypo.replace(/^\/+/, '');
+}
+
+function normalizeHomeAdLinkForResponse(value) {
+  const raw = String(value || '').trim();
+  if (!raw) return null;
+  const lowered = raw.toLowerCase();
+  if (lowered === 'none' || lowered === '#') return null;
+  if (/^(https?:)?\/\//i.test(raw)) return raw;
+  if (raw.startsWith('/')) return raw;
+  if (/^[a-zA-Z][a-zA-Z0-9+.-]*:/.test(raw)) return null;
+  return '/' + raw.replace(/^\/+/, '');
+}
+
+function normalizeHomeAdLinkForStorage(value) {
+  const normalized = normalizeHomeAdLinkForResponse(value);
+  return normalized ? normalized : 'none';
+}
+
+function getHomeAdSlotConfig(slot) {
+  return HOME_AD_SLOT_DEFINITIONS[String(slot || '').trim().toLowerCase()] || null;
+}
+
+function getHomeAdContentTitle(slotConfig, field) {
+  const fieldLabel = field.charAt(0).toUpperCase() + field.slice(1);
+  return `${slotConfig.titlePrefix} ${fieldLabel}`;
+}
+
+function mapHomeAdFromContent(slotConfig, valuesByKey = {}) {
+  const titleKey = `${slotConfig.keyPrefix}title`;
+  const subtitleKey = `${slotConfig.keyPrefix}subtitle`;
+  const imageKey = `${slotConfig.keyPrefix}image`;
+  const linkKey = `${slotConfig.keyPrefix}link`;
+
+  const title = sanitizeHomeAdText(valuesByKey[titleKey], 240);
+  const subtitle = sanitizeHomeAdText(valuesByKey[subtitleKey], 800);
+  const image = normalizeHomeAdImageForResponse(valuesByKey[imageKey]);
+  const link = normalizeHomeAdLinkForResponse(valuesByKey[linkKey]);
+  const isVisible = Boolean(title && image);
+
+  return {
+    slot: slotConfig.slot,
+    title,
+    subtitle,
+    image,
+    link,
+    isVisible
+  };
 }
 
 async function upsertPushSubscription(userId, subscription, userAgent = null) {
@@ -670,6 +808,67 @@ async function listSiteContent() {
   }));
 }
 
+async function listHomeAdsConfig() {
+  const contentKeys = HOME_AD_SLOT_ORDER.flatMap((slot) => {
+    const slotConfig = HOME_AD_SLOT_DEFINITIONS[slot];
+    return HOME_AD_FIELDS.map((field) => `${slotConfig.keyPrefix}${field}`);
+  });
+
+  const result = await query(
+    `SELECT content_key, content
+     FROM site_content
+     WHERE content_key = ANY($1::text[])`,
+    [contentKeys]
+  );
+
+  const valuesByKey = Object.fromEntries(
+    result.rows.map((row) => [row.content_key, row.content])
+  );
+
+  const slotMap = Object.fromEntries(
+    HOME_AD_SLOT_ORDER.map((slot) => {
+      const slotConfig = HOME_AD_SLOT_DEFINITIONS[slot];
+      return [slot, mapHomeAdFromContent(slotConfig, valuesByKey)];
+    })
+  );
+
+  return {
+    top: [slotMap.top_1, slotMap.top_2],
+    bottom: slotMap.bottom,
+    slots: slotMap
+  };
+}
+
+async function updateHomeAdSlot(slot, payload = {}) {
+  const slotConfig = getHomeAdSlotConfig(slot);
+  if (!slotConfig) return null;
+
+  const safeTitle = sanitizeHomeAdText(payload.title, 240);
+  const safeSubtitle = sanitizeHomeAdText(payload.subtitle, 800);
+  const uploadedImage = sanitizeHomeAdText(payload.uploadedImage, 2048);
+  const imageFromBody = sanitizeHomeAdText(payload.image, 2048);
+  const imageFromUrl = sanitizeHomeAdText(payload.imageUrl, 2048);
+  const safeImage = uploadedImage || imageFromBody || imageFromUrl || '';
+  const safeLink = normalizeHomeAdLinkForStorage(payload.link);
+
+  const updates = [
+    ['title', safeTitle],
+    ['subtitle', safeSubtitle],
+    ['image', safeImage],
+    ['link', safeLink]
+  ];
+
+  await Promise.all(
+    updates.map(([field, value]) => {
+      const key = `${slotConfig.keyPrefix}${field}`;
+      const title = getHomeAdContentTitle(slotConfig, field);
+      return upsertSiteContent(key, title, value);
+    })
+  );
+
+  return listHomeAdsConfig();
+}
+
 async function upsertSiteContent(key, title, content) {
   const result = await query(
     `INSERT INTO site_content (content_key, title, content, updated_at)
@@ -962,6 +1161,8 @@ module.exports = {
   markAllNotificationsRead,
   getSiteContentByKey,
   listSiteContent,
+  listHomeAdsConfig,
+  updateHomeAdSlot,
   upsertSiteContent,
   getOrCreateSupportConversation,
   sendSupportMessage,

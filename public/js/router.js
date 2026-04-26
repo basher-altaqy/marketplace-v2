@@ -34,12 +34,20 @@ function parseRoute(path) {
 
 async function waitForApp() {
   if (window.marketplaceApp) {
-    await window.marketplaceApp.ready;
+    try {
+      await window.marketplaceApp.ready;
+    } catch (error) {
+      console.error("[router] app bootstrap failed, using fallback app instance:", error);
+    }
     return window.marketplaceApp;
   }
   return new Promise((resolve) => {
     window.addEventListener("marketplace:ready", async () => {
-      await window.marketplaceApp?.ready;
+      try {
+        await window.marketplaceApp?.ready;
+      } catch (error) {
+        console.error("[router] app ready event received with bootstrap error:", error);
+      }
       resolve(window.marketplaceApp);
     }, { once: true });
   });
@@ -67,6 +75,14 @@ function setFooterRoutes() {
 async function loadContent(path, options = {}) {
   const app = await waitForApp();
   const route = parseRoute(path);
+  const runInBackground = async (task, errorMessage) => {
+    try {
+      await task();
+    } catch (error) {
+      console.error("[router] background route task failed:", error);
+      if (errorMessage) app.showToast?.(errorMessage, "error");
+    }
+  };
 
   if (!options.skipHistory) {
     const method = options.replace ? "replaceState" : "pushState";
@@ -82,21 +98,31 @@ async function loadContent(path, options = {}) {
       app.showView("auth");
       return;
     case "cart":
-      if (app.isAuthenticated()) await app.loadCart();
-      app.showView(app.isAuthenticated() ? "cart" : "auth");
+      if (!app.isAuthenticated()) {
+        app.showView("auth");
+        return;
+      }
+      app.showView("cart");
+      void runInBackground(() => app.loadCart(), "تعذر تحميل السلة.");
       return;
     case "orders":
-      if (app.isAuthenticated()) await app.loadOrders();
-      app.showView(app.isAuthenticated() ? "orders" : "auth");
+      if (!app.isAuthenticated()) {
+        app.showView("auth");
+        return;
+      }
+      app.showView("orders");
+      void runInBackground(() => app.loadOrders(), "تعذر تحميل الطلبات.");
       return;
     case "order":
       if (!app.isAuthenticated()) {
         app.showView("auth");
         return;
       }
-      await app.loadOrders();
       app.showView("orders");
-      await app.loadOrderDetails(Number(route.params[0]));
+      void runInBackground(async () => {
+        await app.loadOrders();
+        await app.loadOrderDetails(Number(route.params[0]));
+      }, "تعذر تحميل تفاصيل الطلب.");
       return;
     case "profile":
       if (!app.isAuthenticated()) {
@@ -111,34 +137,40 @@ async function loadContent(path, options = {}) {
         app.showView("auth");
         return;
       }
-      await app.loadFavorites();
       app.showView("favorites");
+      void runInBackground(() => app.loadFavorites(), "تعذر تحميل المفضلة.");
       return;
     case "conversations":
       if (!app.isAuthenticated()) {
         app.showView("auth");
         return;
       }
-      await app.loadMessages();
       app.showView("messages");
+      void runInBackground(() => app.loadMessages(), "تعذر تحميل المحادثات.");
       return;
     case "conversation":
       if (!app.isAuthenticated()) {
         app.showView("auth");
         return;
       }
-      await app.loadMessages();
       app.showView("messages");
-      await app.openConversation(Number(route.params[0]));
+      void runInBackground(async () => {
+        await app.loadMessages();
+        await app.openConversation(Number(route.params[0]));
+      }, "تعذر تحميل المحادثة.");
       return;
     case "product":
-      if (!app.state?.products?.length) {
-        await app.loadProducts();
-      }
-      await app.openProductPage(Number(route.params[0]));
+      app.showView("home");
+      void runInBackground(async () => {
+        if (!app.state?.products?.length) {
+          await app.loadProducts();
+        }
+        await app.openProductPage(Number(route.params[0]));
+      }, "تعذر تحميل المنتج.");
       return;
     case "seller":
-      await app.openSellerPage(Number(route.params[0]));
+      app.showView("home");
+      void runInBackground(() => app.openSellerPage(Number(route.params[0])), "تعذر تحميل صفحة التاجر.");
       return;
     case "dashboard":
       if (!app.isAuthenticated()) {
@@ -149,13 +181,13 @@ async function loadContent(path, options = {}) {
         navigateTo(app.isBuyer?.() ? "/orders" : "/profile", { replace: true });
         return;
       }
-      await app.loadDashboard();
       app.showView("dashboard");
+      void runInBackground(() => app.loadDashboard(), "تعذر تحميل لوحة التاجر.");
       return;
     case "home":
     default:
-      await app.loadProducts();
       app.showView("home");
+      void runInBackground(() => app.loadProducts(), "تعذر تحميل المنتجات.");
   }
 }
 
@@ -177,11 +209,14 @@ function bindRouteTriggers() {
   ];
 
   buttonRoutes.forEach(([id, path]) => {
-    document.getElementById(id)?.addEventListener("click", (event) => {
+    document.getElementById(id)?.addEventListener("click", async (event) => {
       event.preventDefault();
-      event.stopImmediatePropagation();
-      navigateTo(path);
-    }, true);
+      try {
+        await navigateTo(path);
+      } catch (error) {
+        console.error("[router] button route navigation failed:", error);
+      }
+    });
   });
 
   document.addEventListener("click", (event) => {

@@ -1,5 +1,5 @@
-const APP_SHELL_CACHE = "app-shell-v1";
-const STATIC_CACHE = "app-static-v1";
+const APP_SHELL_CACHE = "app-shell-v3";
+const STATIC_CACHE = "app-static-v3";
 const CACHE_PREFIX = "app-";
 const APP_SHELL_ASSETS = [
   "/",
@@ -91,22 +91,16 @@ self.addEventListener("fetch", (event) => {
   if (isStaticAssetRequest(requestUrl) || requestUrl.pathname === "/" || requestUrl.pathname === "/index.html") {
     event.respondWith((async () => {
       const staticCache = await caches.open(STATIC_CACHE);
-      const cached = await staticCache.match(request);
-      const networkFetch = fetch(request)
-        .then((response) => {
-          if (response && response.ok) {
-            staticCache.put(request, response.clone());
-          }
-          return response;
-        })
-        .catch(() => null);
-
-      if (cached) {
-        return cached;
+      try {
+        const networkResponse = await fetch(request);
+        if (networkResponse && networkResponse.ok) {
+          staticCache.put(request, networkResponse.clone());
+        }
+        return networkResponse;
+      } catch (_error) {
+        const cached = await staticCache.match(request);
+        return cached || Response.error();
       }
-
-      const networkResponse = await networkFetch;
-      return networkResponse || Response.error();
     })());
   }
 });

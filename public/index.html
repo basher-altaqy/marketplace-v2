@@ -7,28 +7,27 @@
   <link rel="manifest" href="/manifest.webmanifest" />
   <link rel="apple-touch-icon" href="/assets/site/topbar-logo.jpg" />
   <title>بضاعة بلدي</title>
-  <link rel="stylesheet" href="/styles.css" />
+  <link rel="stylesheet" href="/styles.css?v=20260425-5" />
   <style>
     @media (max-width: 900px) {
       .topbar.site-header.topbar-layout-lock {
-        min-height: 68px !important;
-        height: 68px !important;
+        min-height: 64px !important;
+        height: 64px !important;
       }
 
       .topbar.site-header.topbar-layout-lock .topbar-inner.home-topbar-layout {
-        display: flex !important;
+        display: grid !important;
+        grid-template-columns: minmax(0, 1fr) 44px !important;
         align-items: center !important;
-        justify-content: space-between !important;
-        min-height: 68px !important;
-        height: 68px !important;
+        min-height: 64px !important;
+        height: 64px !important;
         padding: 8px 10px !important;
         gap: 8px !important;
       }
 
       .topbar.site-header.topbar-layout-lock .brand {
-        flex: 1 1 auto !important;
         min-width: 0 !important;
-        max-width: calc(100% - 54px) !important;
+        max-width: 100% !important;
         display: flex !important;
         align-items: center !important;
         gap: 8px !important;
@@ -41,8 +40,8 @@
       }
 
       .topbar.site-header.topbar-layout-lock .topbar-logo-img {
-        width: 50px !important;
-        height: 50px !important;
+        width: 46px !important;
+        height: 46px !important;
       }
 
       .topbar.site-header.topbar-layout-lock .brand-copy {
@@ -53,7 +52,7 @@
       }
 
       .topbar.site-header.topbar-layout-lock #siteBrandTitle {
-        font-size: 1.02rem !important;
+        font-size: 0.98rem !important;
         line-height: 1.2 !important;
         white-space: nowrap !important;
         overflow: hidden !important;
@@ -65,6 +64,8 @@
         width: 44px !important;
         min-width: 44px !important;
         margin: 0 !important;
+        justify-content: center !important;
+        transform: translate(36px, -14px) !important;
       }
 
       .topbar.site-header.topbar-layout-lock .header-nav-row > .btn:not(.mobile-header-menu-toggle):not(.header-search-trigger) {
@@ -193,32 +194,6 @@
           </div>
         </section>
 
-        <section class="section benefits-section" id="benefitsSection">
-          <div class="hero-benefits-shell">
-            <article class="hero-benefit-card">
-              <div class="hero-benefit-icon" aria-hidden="true">◌</div>
-              <div class="hero-benefit-copy">
-                <h3>عرض أسرع</h3>
-                <p>بطاقات أوضح ووصول أسرع للمنتج وتجربة تصفح أكثر ترتيباً من أول نظرة.</p>
-              </div>
-            </article>
-            <article class="hero-benefit-card">
-              <div class="hero-benefit-icon" aria-hidden="true">◎</div>
-              <div class="hero-benefit-copy">
-                <h3>محادثة مباشرة</h3>
-                <p>تواصل مع البائع فوراً من داخل المنصة وتابع الطلب أو التوصيل بسهولة أكبر.</p>
-              </div>
-            </article>
-            <article class="hero-benefit-card">
-              <div class="hero-benefit-icon" aria-hidden="true">◍</div>
-              <div class="hero-benefit-copy">
-                <h3>متاجر محلية</h3>
-                <p>واجهة افتتاحية أقوى تبرز المتاجر المحلية وتمنحها حضوراً أقرب للمتاجر الاحترافية.</p>
-              </div>
-            </article>
-          </div>
-        </section>
-
         <div class="google-search-wrapper">
           <div class="search-container">
             <div class="rainbow-border"></div>
@@ -233,6 +208,10 @@
             </div>
           </div>
         </div>
+
+        <section class="section home-ads-section home-ads-section-top" id="homeAdsTopSection">
+          <div class="home-ads-grid" id="homeTopAds" aria-live="polite"></div>
+        </section>
 
         <section class="section" id="filtersSection">
           <div class="filters-shell">
@@ -278,6 +257,13 @@
         <section class="section">
           <div id="resultsCount" class="hidden" aria-hidden="true">0 منتج</div>
           <div id="homeCategorySections"></div>
+          <div id="homeLoadMoreWrap" class="home-load-more-wrap hidden">
+            <button class="btn btn-secondary" id="homeLoadMoreBtn" type="button">تحميل المزيد</button>
+          </div>
+        </section>
+
+        <section class="section home-ads-section home-ads-section-bottom" id="homeAdsBottomSection">
+          <div class="home-ads-single" id="homeBottomAd" aria-live="polite"></div>
         </section>
       </section>
 
@@ -956,8 +942,8 @@
     </div>
   </div>
 
-  <script src="/js/legacy-app.js"></script>
-  <script type="module" src="/js/router.js"></script>
+  <script src="/js/legacy-app.js?v=20260425-5"></script>
+  <script type="module" src="/js/router.js?v=20260425-5"></script>
   <script type="module" src="/js/main.js"></script>
 </body>
 </html>

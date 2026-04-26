@@ -9,9 +9,12 @@ const {
   refreshSellerStats
 } = require('../services/marketplace.service');
 const { adminAuthRequired } = require('./admin-auth.routes');
+const { upload } = require('../config/uploads');
 const {
   listSiteContent,
   upsertSiteContent,
+  listHomeAdsConfig,
+  updateHomeAdSlot,
   listSupportConversations,
   getSupportConversationDetails,
   updateSupportConversation,
@@ -630,6 +633,36 @@ router.get('/api/admin/activity', adminAuthRequired, async (_req, res, next) => 
   }
 });
 
+router.get('/api/admin/home-ads', adminAuthRequired, async (_req, res, next) => {
+  try {
+    res.setHeader('Cache-Control', 'no-cache, no-store, must-revalidate');
+    res.setHeader('Pragma', 'no-cache');
+    const homeAds = await listHomeAdsConfig();
+    res.json({ homeAds });
+  } catch (error) {
+    next(error);
+  }
+});
+
+router.put('/api/admin/home-ads/:slot', adminAuthRequired, async (req, res, next) => {
+  try {
+    res.setHeader('Cache-Control', 'no-cache, no-store, must-revalidate');
+    res.setHeader('Pragma', 'no-cache');
+    const homeAds = await updateHomeAdSlot(req.params.slot, req.body || {});
+    if (!homeAds) {
+      return res.status(400).json({ error: 'Invalid home ad slot.' });
+    }
+
+    await logAudit(req.admin.id, 'admin.home_ads.update', 'site_content', null, {
+      slot: String(req.params.slot || '').trim().toLowerCase()
+    });
+
+    res.json({ homeAds });
+  } catch (error) {
+    next(error);
+  }
+});
+
 router.get('/api/admin/content', adminAuthRequired, async (_req, res, next) => {
   try {
     const content = await listSiteContent();
@@ -651,6 +684,30 @@ router.put('/api/admin/content/:key', adminAuthRequired, async (req, res, next) 
     const content = await upsertSiteContent(key, title, contentValue);
     await logAudit(req.admin.id, 'admin.site_content.update', 'site_content', content.id, { key });
     res.json({ content });
+  } catch (error) {
+    next(error);
+  }
+});
+
+router.post('/api/admin/content/upload-image', adminAuthRequired, upload.single('image'), async (req, res, next) => {
+  try {
+    if (!req.file) {
+      return res.status(400).json({ error: 'Image file is required.' });
+    }
+
+    const imageUrl = `/uploads/${req.file.filename}`;
+    await logAudit(req.admin.id, 'admin.site_content.upload_image', 'site_content', null, {
+      fileName: req.file.filename,
+      mimeType: req.file.mimetype,
+      size: req.file.size
+    });
+
+    res.json({
+      url: imageUrl,
+      fileName: req.file.filename,
+      mimeType: req.file.mimetype,
+      size: req.file.size
+    });
   } catch (error) {
     next(error);
   }

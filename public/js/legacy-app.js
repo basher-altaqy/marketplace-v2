@@ -10,6 +10,14 @@ const state = {
   selectedRegion: "all",
   search: "",
   sort: "newest",
+  productsPagination: {
+    page: 1,
+    limit: 20,
+    total: 0,
+    totalPages: 0,
+    hasMore: false,
+    isLoading: false
+  },
   currentCatalogTitle: "كل المنتجات",
   currentCatalogProducts: [],
   currentSellerId: null,
@@ -33,6 +41,10 @@ const state = {
   siteAppearance: {
     backgroundImage: "",
     heroImage: ""
+  },
+  homeAds: {
+    top: [],
+    bottom: null
   },
   supportConversation: null,
   siteContentCache: {},
@@ -116,6 +128,32 @@ const V1_FLAGS = {
   ratingsSubmission: false,
   legacyPurchaseModal: false
 };
+
+const DEFAULT_HOME_ADS = {
+  top: [
+    {
+      title: "إعلان رئيسي 1",
+      subtitle: "يمكن تعديله من لوحة الإدارة",
+      image: "/assets/site/black-gold-marble-reference.jpg",
+      link: ""
+    },
+    {
+      title: "إعلان رئيسي 2",
+      subtitle: "مخصص لعرض عروضك أو حملاتك",
+      image: "/assets/site/black-gold-marble-reference.jpg",
+      link: ""
+    }
+  ],
+  bottom: {
+    title: "إعلان أسفل المنتجات",
+    subtitle: "يمكن تعديل الصورة والنص والرابط من لوحة الإدارة",
+    image: "/assets/site/black-gold-marble-reference.jpg",
+    link: ""
+  }
+};
+const HOME_ADS_REFRESH_MIN_MS = 15000;
+let homeAdsLastLoadedAt = 0;
+let homeAdsRefreshPromise = null;
 
 const V1_ALLOWED_ORDER_TRANSITIONS = new Set(["seller_confirmed", "completed", "cancelled"]);
 
@@ -448,6 +486,8 @@ const productViewTitle = document.getElementById("productViewTitle");
 const productViewContent = document.getElementById("productViewContent");
 const relatedProductsGrid = document.getElementById("relatedProductsGrid");
 const resultsCount = document.getElementById("resultsCount");
+const homeLoadMoreWrap = document.getElementById("homeLoadMoreWrap");
+const homeLoadMoreBtn = document.getElementById("homeLoadMoreBtn");
 const categoryChips = document.getElementById("categoryChips");
 
 const filterKeyword = document.getElementById("filterKeyword");
@@ -469,6 +509,10 @@ const heroTitle = document.getElementById("heroTitle");
 const heroDescription = document.getElementById("heroDescription");
 const heroPosterMedia = document.getElementById("heroPosterMedia");
 const heroSellerCtaBtn = document.getElementById("heroSellerCtaBtn");
+const homeAdsTopSection = document.getElementById("homeAdsTopSection");
+const homeAdsBottomSection = document.getElementById("homeAdsBottomSection");
+const homeTopAds = document.getElementById("homeTopAds");
+const homeBottomAd = document.getElementById("homeBottomAd");
 
 const navLoginBtn = document.getElementById("navLoginBtn");
 const navAddProductBtn = document.getElementById("navAddProductBtn");
@@ -1285,10 +1329,219 @@ function refreshNavBadges() {
 }
 
 function normalizeSiteAssetUrl(value) {
-  const raw = String(value || "").trim();
+  const raw = String(value || "")
+    .trim()
+    .replace(/^\/?ssets\//i, "/assets/");
   if (!raw) return "";
   if (/^(https?:)?\/\//i.test(raw) || raw.startsWith("/")) return raw;
   return "/" + raw.replace(/^\/+/, "");
+}
+
+function normalizeAdLink(value) {
+  const raw = String(value || "").trim();
+  if (!raw) return "";
+  const normalized = raw.toLowerCase();
+  if (normalized === "none" || normalized === "null" || normalized === "disabled" || normalized === "-" || normalized === "#") {
+    return "";
+  }
+  if (/^(https?:)?\/\//i.test(raw) || raw.startsWith("/")) return raw;
+  if (/^[a-zA-Z][a-zA-Z0-9+.-]*:/.test(raw)) return "";
+  return "/" + raw.replace(/^\/+/, "");
+}
+
+function normalizeHomeAd(ad = {}, fallback = {}) {
+  const title = String(ad.title || fallback.title || "").trim();
+  const subtitle = String(ad.subtitle || fallback.subtitle || "").trim();
+  const image = normalizeSiteAssetUrl(ad.image || fallback.image || "");
+  const link = normalizeAdLink(ad.link || fallback.link || "");
+  return { title, subtitle, image, link };
+}
+
+function getHomeAdCardMarkup(ad = {}, variant = "top") {
+  const safeAd = normalizeHomeAd(ad);
+  const title = safeAd.title || "إعلان";
+  const subtitle = safeAd.subtitle || "";
+  const imageMarkup = safeAd.image
+    ? `<img class="home-ad-image" src="${escapeHtml(safeAd.image)}" alt="${escapeHtml(title)}" loading="lazy">`
+    : `<div class="home-ad-image home-ad-image-placeholder" aria-hidden="true"></div>`;
+  const bodyMarkup = `
+    <div class="home-ad-body">
+      <h3 class="home-ad-title">${escapeHtml(title)}</h3>
+      ${subtitle ? `<p class="home-ad-subtitle">${escapeHtml(subtitle)}</p>` : ""}
+    </div>
+  `;
+
+  if (safeAd.link) {
+    return `
+      <button class="home-ad-card home-ad-${variant} is-clickable" type="button" data-home-ad-link="${escapeHtml(safeAd.link)}">
+        <div class="home-ad-media">${imageMarkup}</div>
+        ${bodyMarkup}
+      </button>
+    `;
+  }
+
+  return `
+    <article class="home-ad-card home-ad-${variant}">
+      <div class="home-ad-media">${imageMarkup}</div>
+      ${bodyMarkup}
+    </article>
+  `;
+}
+
+function bindHomeAdActions(scope) {
+  if (!scope) return;
+  scope.querySelectorAll("[data-home-ad-link]").forEach((node) => {
+    if (node.dataset.homeAdBound === "true") return;
+    node.dataset.homeAdBound = "true";
+    node.addEventListener("click", async () => {
+      const target = String(node.dataset.homeAdLink || "").trim();
+      if (!target) return;
+      if (/^(https?:)?\/\//i.test(target)) {
+        window.open(target, "_blank", "noopener,noreferrer");
+        return;
+      }
+      if (typeof window.navigateTo === "function") {
+        await window.navigateTo(target);
+        return;
+      }
+      location.href = target;
+    });
+  });
+}
+
+function renderHomeAds() {
+  const topAds = (Array.isArray(state.homeAds?.top) ? state.homeAds.top : [])
+    .filter((ad) => Boolean(ad?.isVisible ?? (ad?.title && ad?.image)));
+  const bottomCandidate = state.homeAds?.bottom || null;
+  const bottomAdItem = bottomCandidate && Boolean(bottomCandidate.isVisible ?? (bottomCandidate.title && bottomCandidate.image))
+    ? bottomCandidate
+    : null;
+
+  if (homeTopAds) {
+    homeTopAds.innerHTML = topAds.map((ad) => getHomeAdCardMarkup(ad, "top")).join("");
+    bindHomeAdActions(homeTopAds);
+  }
+
+  if (homeBottomAd) {
+    homeBottomAd.innerHTML = bottomAdItem ? getHomeAdCardMarkup(bottomAdItem, "bottom") : "";
+    bindHomeAdActions(homeBottomAd);
+  }
+
+  homeAdsTopSection?.classList.toggle("hidden", !topAds.length);
+  homeAdsBottomSection?.classList.toggle("hidden", !bottomAdItem);
+}
+
+async function loadHomeAdsFromLegacyContentKeys() {
+  const contentKeys = [
+    "home_top_ad_1_title",
+    "home_top_ad_1_subtitle",
+    "home_top_ad_1_image",
+    "home_top_ad_1_link",
+    "home_top_ad_2_title",
+    "home_top_ad_2_subtitle",
+    "home_top_ad_2_image",
+    "home_top_ad_2_link",
+    "home_bottom_ad_title",
+    "home_bottom_ad_subtitle",
+    "home_bottom_ad_image",
+    "home_bottom_ad_link"
+  ];
+
+  const entries = Object.fromEntries(await Promise.all(contentKeys.map(async (key) => {
+    const cached = state.siteContentCache[key];
+    if (cached && typeof cached === "object") return [key, cached];
+
+    try {
+      const response = await api(`/api/content/${key}`);
+      if (response?.content) {
+        state.siteContentCache[key] = response.content;
+        return [key, response.content];
+      }
+    } catch (_error) {
+      // Keep values empty if content key is missing or unavailable.
+    }
+
+    return [key, null];
+  })));
+
+  const getValue = (key) => String(entries[key]?.content || "").trim();
+  const mapLegacyAd = (slot, titleKey, subtitleKey, imageKey, linkKey) => {
+    const normalized = normalizeHomeAd({
+      title: getValue(titleKey),
+      subtitle: getValue(subtitleKey),
+      image: getValue(imageKey),
+      link: getValue(linkKey)
+    });
+    return {
+      ...normalized,
+      slot,
+      isVisible: Boolean(normalized.title && normalized.image)
+    };
+  };
+
+  state.homeAds = {
+    top: [
+      mapLegacyAd("top_1", "home_top_ad_1_title", "home_top_ad_1_subtitle", "home_top_ad_1_image", "home_top_ad_1_link"),
+      mapLegacyAd("top_2", "home_top_ad_2_title", "home_top_ad_2_subtitle", "home_top_ad_2_image", "home_top_ad_2_link")
+    ],
+    bottom: mapLegacyAd("bottom", "home_bottom_ad_title", "home_bottom_ad_subtitle", "home_bottom_ad_image", "home_bottom_ad_link")
+  };
+
+  renderHomeAds();
+}
+
+async function loadHomeAds() {
+  try {
+    const response = await api(`/api/content/home-ads?t=${Date.now()}`);
+    const topAds = Array.isArray(response?.homeAds?.top) ? response.homeAds.top : [];
+    const bottomAd = response?.homeAds?.bottom || null;
+    const mapApiAd = (ad, slotFallback) => {
+      const normalized = normalizeHomeAd({
+        title: ad?.title,
+        subtitle: ad?.subtitle,
+        image: ad?.image,
+        link: ad?.link
+      });
+      return {
+        ...normalized,
+        slot: String(ad?.slot || slotFallback),
+        isVisible: ad?.isVisible === undefined ? Boolean(normalized.title && normalized.image) : Boolean(ad?.isVisible)
+      };
+    };
+
+    state.homeAds = {
+      top: [
+        mapApiAd(topAds[0], "top_1"),
+        mapApiAd(topAds[1], "top_2")
+      ],
+      bottom: mapApiAd(bottomAd, "bottom")
+    };
+
+    renderHomeAds();
+    homeAdsLastLoadedAt = Date.now();
+    return;
+  } catch (_error) {
+    await loadHomeAdsFromLegacyContentKeys();
+    homeAdsLastLoadedAt = Date.now();
+  }
+}
+
+function refreshHomeAdsIfNeeded(force = false) {
+  const now = Date.now();
+  if (!force && homeAdsRefreshPromise) return homeAdsRefreshPromise;
+  if (!force && homeAdsLastLoadedAt && (now - homeAdsLastLoadedAt) < HOME_ADS_REFRESH_MIN_MS) {
+    return Promise.resolve();
+  }
+
+  homeAdsRefreshPromise = loadHomeAds()
+    .catch((error) => {
+      console.debug("[home-ads] refresh failed:", error?.message || error);
+    })
+    .finally(() => {
+      homeAdsRefreshPromise = null;
+    });
+
+  return homeAdsRefreshPromise;
 }
 
 function applySiteAppearance() {
@@ -1366,6 +1619,10 @@ function showView(viewName) {
   }
   if (safeViewName === "notifications") notificationsView?.classList.remove("hidden");
   if (safeViewName === "admin") adminView?.classList.remove("hidden");
+
+  if (safeViewName === "home") {
+    refreshHomeAdsIfNeeded(false);
+  }
 
   window.dispatchEvent(new CustomEvent("marketplace:viewchange", {
     detail: { view: safeViewName }
@@ -2026,22 +2283,100 @@ async function loadMeta() {
   }
 }
 
-async function loadProducts() {
+function getProductsPaginationDefault() {
+  return {
+    page: 1,
+    limit: 20,
+    total: 0,
+    totalPages: 0,
+    hasMore: false,
+    isLoading: false
+  };
+}
+
+function setProductsLoadingState(isLoading) {
+  state.productsPagination = {
+    ...getProductsPaginationDefault(),
+    ...state.productsPagination,
+    isLoading: Boolean(isLoading)
+  };
+}
+
+async function loadProducts({ mode = "reset" } = {}) {
+  const appendMode = mode === "append";
+  const currentPagination = {
+    ...getProductsPaginationDefault(),
+    ...state.productsPagination
+  };
+
+  if (currentPagination.isLoading) return;
+  if (appendMode && !currentPagination.hasMore) return;
+
+  const nextPage = appendMode ? currentPagination.page + 1 : 1;
+  const nextLimit = currentPagination.limit || 20;
+
+  setProductsLoadingState(true);
+  renderHomeLoadMoreControl();
+
   const params = new URLSearchParams();
   if (state.search) params.set("keyword", state.search);
   if (state.selectedCategory !== "all") params.set("category", state.selectedCategory);
   if (state.selectedRegion !== "all") params.set("region", state.selectedRegion);
   if (state.sort) params.set("sort", state.sort);
+  params.set("page", String(nextPage));
+  params.set("limit", String(nextLimit));
 
-  const data = await api(`/api/products?${params.toString()}`);
-  state.products = normalizeProducts(data.products || []);
-  state.filteredProducts = [...state.products];
+  try {
+    const data = await api(`/api/products?${params.toString()}`);
+    const incomingProducts = normalizeProducts(data.items || data.products || []);
 
-  if (!state.metaLoaded) {
-    buildMetaFromProducts();
+    if (appendMode) {
+      const existingIds = new Set((state.products || []).map((item) => Number(item.id)));
+      const merged = [...state.products];
+      for (const product of incomingProducts) {
+        if (existingIds.has(Number(product.id))) continue;
+        merged.push(product);
+      }
+      state.products = merged;
+    } else {
+      state.products = incomingProducts;
+    }
+
+    state.filteredProducts = [...state.products];
+
+    const responsePagination = data.pagination || {};
+    const safeTotal = Number(responsePagination.total || state.products.length || 0);
+    const safePage = Number(responsePagination.page || nextPage || 1);
+    const safeLimit = Number(responsePagination.limit || nextLimit || 20);
+    const safeTotalPages = Number(
+      responsePagination.totalPages
+      || (safeLimit > 0 ? Math.ceil(safeTotal / safeLimit) : 0)
+      || 0
+    );
+    const safeHasMore = typeof responsePagination.hasMore === "boolean"
+      ? responsePagination.hasMore
+      : safePage < safeTotalPages;
+
+    state.productsPagination = {
+      page: safePage,
+      limit: safeLimit,
+      total: safeTotal,
+      totalPages: safeTotalPages,
+      hasMore: safeHasMore,
+      isLoading: false
+    };
+
+    if (!state.metaLoaded) {
+      buildMetaFromProducts();
+    }
+
+    renderFilters();
+    renderHomeSections();
+  } catch (error) {
+    setProductsLoadingState(false);
+    renderHomeLoadMoreControl();
+    throw error;
   }
-  renderFilters();
-  renderHomeSections();
 }
 
 function buildMetaFromProducts() {
@@ -2454,7 +2789,8 @@ function renderFilters() {
   syncMobileFilterControls();
   renderFilterChips(categoryChips);
   renderFilterChips(mobileCategoryChips, { closeOnSelect: true });
-  updateMobileFiltersSummary(state.products.length);
+  const productsTotal = Number(state.productsPagination?.total || 0);
+  updateMobileFiltersSummary(productsTotal > 0 ? productsTotal : state.products.length);
 }
 
 
@@ -2732,11 +3068,13 @@ function bindProductActions(scope = document) {
 
 function renderHomeSections() {
   if (!resultsCount || !homeCategorySections) return;
-  resultsCount.textContent = `${state.filteredProducts.length} منتج`;
+  const totalProducts = Number(state.productsPagination?.total || state.filteredProducts.length || 0);
+  resultsCount.textContent = `${totalProducts} منتج`;
 
   if (!state.filteredProducts.length) {
     destroyHomeCategoryMarquees();
     homeCategorySections.innerHTML = `<div class="card" style="padding:20px;"><p class="muted">لا توجد منتجات مطابقة.</p></div>`;
+    renderHomeLoadMoreControl();
     return;
   }
 
@@ -2765,6 +3103,19 @@ function renderHomeSections() {
 
   bindProductActions(homeCategorySections);
   setupHomeCategoryMarquees();
+  renderHomeLoadMoreControl();
+}
+
+function renderHomeLoadMoreControl() {
+  if (!homeLoadMoreWrap || !homeLoadMoreBtn) return;
+
+  const hasProducts = Array.isArray(state.filteredProducts) && state.filteredProducts.length > 0;
+  const hasMore = Boolean(state.productsPagination?.hasMore);
+  const isLoading = Boolean(state.productsPagination?.isLoading);
+
+  homeLoadMoreWrap.classList.toggle("hidden", !hasProducts || !hasMore);
+  homeLoadMoreBtn.disabled = isLoading;
+  homeLoadMoreBtn.textContent = isLoading ? "جارٍ التحميل..." : "تحميل المزيد";
 }
 
 function openCatalog(title, products) {
@@ -4152,21 +4503,9 @@ async function handleRegisterSubmit(event) {
 async function afterAuthLoad() {
   refreshNav();
   await loadProducts();
-  if (state.user?.role === "seller") {
-    await loadDashboard();
-  } else {
-    clearBuyerExperienceState();
-  }
-  if (state.user) {
-    await loadMessages();
-    if (isBuyerUser()) {
-      await loadFavorites();
-      await loadCart();
-    }
-    await loadOrders();
-    fillProfileFormFromUser();
-    window.marketplacePoller?.start?.();
-  }
+  if (!state.user?.role || state.user.role !== "seller") clearBuyerExperienceState();
+  if (state.user) fillProfileFormFromUser();
+  if (state.user) window.marketplacePoller?.start?.();
 }
 
 
@@ -5946,6 +6285,13 @@ function bindStaticEvents() {
     await applyFiltersFromSource("mobile");
     setMobileFiltersOpen(false);
   });
+  homeLoadMoreBtn?.addEventListener("click", async () => {
+    try {
+      await loadProducts({ mode: "append" });
+    } catch (error) {
+      showToast(error.message || "تعذر تحميل المزيد من المنتجات");
+    }
+  });
   mobileBottomNav?.addEventListener("click", async (event) => {
     const trigger = event.target.closest("[data-mobile-bottom-value]");
     if (!trigger) return;
@@ -6078,6 +6424,11 @@ function bindStaticEvents() {
 
   document.addEventListener("visibilitychange", updateHomeCategoryMarqueeActivity);
   window.addEventListener("marketplace:viewchange", updateHomeCategoryMarqueeActivity);
+  window.addEventListener("focus", () => {
+    if (!homeView?.classList.contains("hidden")) {
+      refreshHomeAdsIfNeeded(true);
+    }
+  });
   navLoginBtn?.addEventListener("click", () => showView("auth"));
 
   navLogoutBtn?.addEventListener("click", () => {
@@ -6605,6 +6956,7 @@ async function bootstrap() {
   refreshNav();
   bindStaticEvents();
   await loadSiteAppearance();
+  await loadHomeAds();
   await restoreSession();
   await loadMeta();
   await loadProducts();
@@ -6612,16 +6964,6 @@ async function bootstrap() {
   if (state.user) {
     fillProfileFormFromUser();
     await syncPushSettingsUi();
-    await loadMessages();
-    await loadNotifications();
-    await loadFavorites();
-    await loadCart();
-    await loadOrders();
-    await loadSupportConversation();
-  }
-
-  if (state.user?.role === "seller") {
-    await loadDashboard();
   }
 
   showView("home");

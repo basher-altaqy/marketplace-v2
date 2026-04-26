@@ -736,6 +736,16 @@ textarea.field {
   }
 }
 
+.home-load-more-wrap {
+  display: flex;
+  justify-content: center;
+  margin: 18px 0 8px;
+}
+
+.home-load-more-wrap .btn {
+  min-width: 170px;
+}
+
 @media (max-width: 700px) {
   .filters-bar,
   .inline-fields,
@@ -17194,5 +17204,175 @@ header.topbar.site-header {
   #messagesView .chat-row.is-other .chat-bubble {
     margin-right: auto !important;
     margin-left: 0 !important;
+  }
+}
+
+/* ===== Home ads slots (top + bottom) ===== */
+#homeView .home-ads-section {
+  padding-top: 10px;
+  padding-bottom: 8px;
+}
+
+#homeView .home-ads-grid,
+#homeView .home-ads-single {
+  display: grid;
+  gap: 14px;
+  max-width: 820px;
+  margin: 0 auto;
+}
+
+#homeView .home-ad-card {
+  width: 100%;
+  aspect-ratio: 8 / 3;
+  min-height: 140px;
+  border: 1px solid rgba(148, 163, 184, 0.26);
+  border-radius: 20px;
+  overflow: hidden;
+  position: relative;
+  display: block;
+  text-align: right;
+  background: #0f172a;
+  color: #fff;
+  box-shadow: 0 12px 28px rgba(15, 23, 42, 0.18);
+}
+
+#homeView .home-ad-card.is-clickable {
+  border: 0;
+  cursor: pointer;
+  padding: 0;
+  font: inherit;
+}
+
+#homeView .home-ad-media {
+  position: absolute;
+  inset: 0;
+}
+
+#homeView .home-ad-image,
+#homeView .home-ad-image-placeholder {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+}
+
+#homeView .home-ad-image-placeholder {
+  background: linear-gradient(135deg, #334155, #0f172a);
+}
+
+#homeView .home-ad-card::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(120deg, rgba(15, 23, 42, 0.7), rgba(15, 23, 42, 0.35));
+  z-index: 1;
+}
+
+#homeView .home-ad-body {
+  position: relative;
+  z-index: 2;
+  height: 100%;
+  display: grid;
+  align-content: center;
+  gap: 8px;
+  padding: 18px 20px;
+}
+
+#homeView .home-ad-title {
+  margin: 0;
+  font-size: clamp(1rem, 2.7vw, 1.35rem);
+  line-height: 1.28;
+  font-weight: 800;
+}
+
+#homeView .home-ad-subtitle {
+  margin: 0;
+  font-size: clamp(0.82rem, 2.2vw, 1rem);
+  line-height: 1.5;
+  color: rgba(241, 245, 249, 0.95);
+}
+
+@media (max-width: 900px) {
+  #homeView .home-ads-grid,
+  #homeView .home-ads-single {
+    max-width: 100%;
+  }
+
+  #homeView .home-ad-card {
+    aspect-ratio: 16 / 7;
+    min-height: 126px;
+    border-radius: 16px;
+  }
+
+  #homeView .home-ad-body {
+    padding: 14px 14px;
+    gap: 6px;
+  }
+}
+
+/* ===== Mobile topbar hard fix ===== */
+@media (max-width: 900px) {
+  header.topbar.site-header.topbar-layout-lock {
+    min-height: 64px !important;
+    height: 64px !important;
+  }
+
+  header.topbar.site-header.topbar-layout-lock .topbar-inner.home-topbar-layout {
+    display: grid !important;
+    grid-template-columns: minmax(0, 1fr) 44px !important;
+    align-items: center !important;
+    min-height: 64px !important;
+    height: 64px !important;
+    gap: 8px !important;
+    padding: 8px 10px !important;
+  }
+
+  header.topbar.site-header.topbar-layout-lock .brand {
+    min-width: 0 !important;
+    max-width: 100% !important;
+    gap: 8px !important;
+  }
+
+  header.topbar.site-header.topbar-layout-lock .topbar-logo-img {
+    width: 46px !important;
+    height: 46px !important;
+  }
+
+  header.topbar.site-header.topbar-layout-lock #siteBrandTitle {
+    font-size: 0.98rem !important;
+    line-height: 1.2 !important;
+    white-space: nowrap !important;
+    overflow: hidden !important;
+    text-overflow: ellipsis !important;
+  }
+
+  header.topbar.site-header.topbar-layout-lock .header-nav-row {
+    width: 44px !important;
+    min-width: 44px !important;
+    margin: 0 !important;
+    justify-content: center !important;
+    transform: translate(36px, -14px) !important;
+  }
+
+  header.topbar.site-header.topbar-layout-lock .header-nav-row > .btn:not(.mobile-header-menu-toggle):not(.header-search-trigger) {
+    display: none !important;
+  }
+
+  header.topbar.site-header.topbar-layout-lock .mobile-header-menu {
+    width: 44px !important;
+    min-width: 44px !important;
+    margin: 0 !important;
+  }
+
+  header.topbar.site-header.topbar-layout-lock .mobile-header-menu-toggle {
+    width: 44px !important;
+    height: 44px !important;
+    min-width: 44px !important;
+    min-height: 44px !important;
+    border-radius: 12px !important;
+    padding: 0 !important;
+    display: inline-flex !important;
+    align-items: center !important;
+    justify-content: center !important;
   }
 }

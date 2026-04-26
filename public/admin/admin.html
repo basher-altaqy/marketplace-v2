@@ -4,7 +4,7 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>لوحة الإدارة</title>
-  <link rel="stylesheet" href="/admin/admin.css" />
+  <link rel="stylesheet" href="/admin/admin.css?v=20260425-4" />
 </head>
 <body>
   <div class="admin-app">
@@ -19,12 +19,6 @@
         </div>
       </div>
 
-      <div class="sidebar-profile">
-        <span class="sidebar-profile-label">الحساب الحالي</span>
-        <strong id="adminIdentity">جارٍ التحقق...</strong>
-        <span id="adminIdentityRole">مدير النظام</span>
-      </div>
-
       <nav class="sidebar-nav" aria-label="Admin navigation">
         <button class="sidebar-nav-item active" type="button" data-section="overview">نظرة عامة</button>
         <button class="sidebar-nav-item" type="button" data-section="users">المستخدمون</button>
@@ -32,6 +26,7 @@
         <button class="sidebar-nav-item" type="button" data-section="reports">البلاغات</button>
         <button class="sidebar-nav-item" type="button" data-section="conversations">المحادثات</button>
         <button class="sidebar-nav-item" type="button" data-section="content">المحتوى الثابت</button>
+        <button class="sidebar-nav-item" type="button" data-section="homeAds">إعلانات الرئيسية</button>
         <button class="sidebar-nav-item" type="button" data-section="support">الدعم الفني</button>
         <button class="sidebar-nav-item" type="button" data-section="system">حالة النظام</button>
         <button class="sidebar-nav-item" type="button" data-section="activity">النشاط</button>
@@ -174,6 +169,71 @@
         </div>
       </section>
 
+      <section class="admin-panel" data-panel="homeAds">
+        <div class="section-head">
+          <div>
+            <h3>إعلانات الصفحة الرئيسية</h3>
+            <p>إدارة الإعلانين العلويين والإعلان السفلي من شاشة واحدة.</p>
+          </div>
+        </div>
+
+        <div class="table-card home-ads-editor-card">
+          <form id="homeAdsEditorForm" class="home-ads-editor-form">
+            <div class="toolbar-grid home-ads-toolbar">
+              <label class="home-ads-field" for="homeAdsSlotSelect">
+                <span>الموقع</span>
+                <select id="homeAdsSlotSelect" class="field-control">
+                  <option value="top_1">العلوي 1</option>
+                  <option value="top_2">العلوي 2</option>
+                  <option value="bottom">السفلي</option>
+                </select>
+              </label>
+              <div id="homeAdsSlotStatus" class="inline-muted"></div>
+            </div>
+
+            <div class="home-ads-form-grid">
+              <label class="home-ads-field" for="homeAdsTitleInput">
+                <span>العنوان الرئيسي</span>
+                <input id="homeAdsTitleInput" class="field-control" type="text" placeholder="مثال: تخفيضات نهاية الأسبوع" />
+              </label>
+
+              <label class="home-ads-field home-ads-field-wide" for="homeAdsSubtitleInput">
+                <span>العنوان الفرعي</span>
+                <textarea id="homeAdsSubtitleInput" class="detail-textarea" style="min-height:96px;" placeholder="نص صغير تحت العنوان الرئيسي"></textarea>
+              </label>
+
+              <label class="home-ads-field" for="homeAdsImageInput">
+                <span>رابط الصورة</span>
+                <input id="homeAdsImageInput" class="field-control" type="text" placeholder="/uploads/banner.jpg أو https://..." />
+              </label>
+
+              <label class="home-ads-field" for="homeAdsLinkInput">
+                <span>رابط الوجهة (اختياري)</span>
+                <input id="homeAdsLinkInput" class="field-control" type="text" placeholder="/products أو https://..." />
+              </label>
+            </div>
+
+            <div class="detail-card detail-wide">
+              <strong>رفع صورة</strong>
+              <div class="content-upload-row">
+                <input id="homeAdsImageUploadInput" class="field-control" type="file" accept=".jpg,.jpeg,.png,.webp" />
+                <button id="homeAdsImageUploadBtn" class="action-button secondary" type="button">رفع الصورة</button>
+              </div>
+              <div id="homeAdsUploadHint" class="inline-muted">عند وجود صورة مرفوعة + رابط صورة، يتم اعتماد الصورة المرفوعة.</div>
+            </div>
+
+            <div class="action-row">
+              <button id="homeAdsSaveBtn" class="action-button primary" type="submit">حفظ</button>
+            </div>
+          </form>
+        </div>
+
+        <div class="table-card home-ads-preview-card">
+          <div class="card-head"><h3>معاينة الإعلانات</h3></div>
+          <div id="homeAdsPreviewGrid" class="home-ads-preview-grid"></div>
+        </div>
+      </section>
+
       <section class="admin-panel" data-panel="support">
         <div class="section-head">
           <div>
@@ -249,6 +309,6 @@
     </div>
   </div>
 
-  <script src="/admin/admin.js"></script>
+  <script src="/admin/admin.js?v=20260425-4"></script>
 </body>
 </html>

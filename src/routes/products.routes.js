@@ -28,8 +28,18 @@ router.get('/api/products', async (req, res, next) => {
       minPrice = '',
       maxPrice = '',
       condition = 'all',
-      sort = 'newest'
+      sort = 'newest',
+      page = '1',
+      limit = '20'
     } = req.query;
+
+    const parsedPage = Number.parseInt(String(page), 10);
+    const parsedLimit = Number.parseInt(String(limit), 10);
+    const safePage = Number.isInteger(parsedPage) && parsedPage > 0 ? parsedPage : 1;
+    const safeLimit = Number.isInteger(parsedLimit) && parsedLimit > 0
+      ? Math.min(parsedLimit, 60)
+      : 20;
+    const offset = (safePage - 1) * safeLimit;
 
     const params = [];
     const where = [`p.status = 'published'`, `u.is_active = TRUE`, `u.role = 'seller'`];
@@ -86,11 +96,38 @@ router.get('/api/products', async (req, res, next) => {
       LEFT JOIN seller_profiles sp ON sp.user_id = u.id
       WHERE ${where.join(' AND ')}
       ORDER BY ${orderBy}
+      LIMIT $${params.length + 1}
+      OFFSET $${params.length + 2}
     `;
 
-    const result = await query(sql, params);
+    const countSql = `
+      SELECT COUNT(*)::int AS total
+      FROM products p
+      JOIN users u ON u.id = p.seller_id
+      LEFT JOIN seller_profiles sp ON sp.user_id = u.id
+      WHERE ${where.join(' AND ')}
+    `;
+
+    const [countResult, result] = await Promise.all([
+      query(countSql, params),
+      query(sql, [...params, safeLimit, offset])
+    ]);
     const products = await mapProductRows(result.rows);
-    res.json({ products });
+    const total = Number(countResult.rows?.[0]?.total || 0);
+    const totalPages = total > 0 ? Math.ceil(total / safeLimit) : 0;
+    const hasMore = offset + products.length < total;
+
+    res.json({
+      products,
+      items: products,
+      pagination: {
+        page: safePage,
+        limit: safeLimit,
+        total,
+        totalPages,
+        hasMore
+      }
+    });
   } catch (error) {
     next(error);
   }
