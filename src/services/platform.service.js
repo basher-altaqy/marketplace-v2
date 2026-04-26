@@ -35,6 +35,12 @@ const HOME_AD_SLOT_DEFINITIONS = {
 };
 const HOME_AD_SLOT_ORDER = ['top_1', 'top_2', 'bottom'];
 const HOME_AD_FIELDS = ['title', 'subtitle', 'image', 'link'];
+const HOME_AD_CONTENT_KEYS = new Set(
+  HOME_AD_SLOT_ORDER.flatMap((slot) => {
+    const slotConfig = HOME_AD_SLOT_DEFINITIONS[slot];
+    return HOME_AD_FIELDS.map((field) => `${slotConfig.keyPrefix}${field}`);
+  })
+);
 const DEFAULT_CONTENT = [
   {
     key: 'about_company',
@@ -76,66 +82,6 @@ const DEFAULT_CONTENT = [
     title: 'صورة الواجهة العليا',
     content: '/assets/site/black-gold-marble-reference.jpg'
   },
-  {
-    key: 'home_top_ad_1_title',
-    title: 'Home Top Ad 1 Title',
-    content: 'إعلان علوي 1'
-  },
-  {
-    key: 'home_top_ad_1_subtitle',
-    title: 'Home Top Ad 1 Subtitle',
-    content: 'عدّل النص من لوحة الإدارة لإظهار عرضك الأول'
-  },
-  {
-    key: 'home_top_ad_1_image',
-    title: 'Home Top Ad 1 Image',
-    content: '/assets/site/black-gold-marble-reference.jpg'
-  },
-  {
-    key: 'home_top_ad_1_link',
-    title: 'Home Top Ad 1 Link',
-    content: 'none'
-  },
-  {
-    key: 'home_top_ad_2_title',
-    title: 'Home Top Ad 2 Title',
-    content: 'إعلان علوي 2'
-  },
-  {
-    key: 'home_top_ad_2_subtitle',
-    title: 'Home Top Ad 2 Subtitle',
-    content: 'عدّل النص من لوحة الإدارة لإظهار عرضك الثاني'
-  },
-  {
-    key: 'home_top_ad_2_image',
-    title: 'Home Top Ad 2 Image',
-    content: '/assets/site/black-gold-marble-reference.jpg'
-  },
-  {
-    key: 'home_top_ad_2_link',
-    title: 'Home Top Ad 2 Link',
-    content: 'none'
-  },
-  {
-    key: 'home_bottom_ad_title',
-    title: 'Home Bottom Ad Title',
-    content: 'إعلان أسفل المنتجات'
-  },
-  {
-    key: 'home_bottom_ad_subtitle',
-    title: 'Home Bottom Ad Subtitle',
-    content: 'يمكن عرض إعلان إضافي أسفل بطاقات المنتجات مباشرة'
-  },
-  {
-    key: 'home_bottom_ad_image',
-    title: 'Home Bottom Ad Image',
-    content: '/assets/site/black-gold-marble-reference.jpg'
-  },
-  {
-    key: 'home_bottom_ad_link',
-    title: 'Home Bottom Ad Link',
-    content: 'none'
-  }
 ];
 
 fs.mkdirSync(LOGS_DIR, { recursive: true });
@@ -799,13 +745,15 @@ async function listSiteContent() {
   const result = await query(
     `SELECT * FROM site_content ORDER BY content_key ASC`
   );
-  return result.rows.map((row) => ({
-    id: row.id,
-    key: row.content_key,
-    title: row.title,
-    content: row.content,
-    updatedAt: row.updated_at
-  }));
+  return result.rows
+    .filter((row) => !HOME_AD_CONTENT_KEYS.has(row.content_key))
+    .map((row) => ({
+      id: row.id,
+      key: row.content_key,
+      title: row.title,
+      content: row.content,
+      updatedAt: row.updated_at
+    }));
 }
 
 async function listHomeAdsConfig() {

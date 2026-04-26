@@ -1431,65 +1431,6 @@ function renderHomeAds() {
   homeAdsBottomSection?.classList.toggle("hidden", !bottomAdItem);
 }
 
-async function loadHomeAdsFromLegacyContentKeys() {
-  const contentKeys = [
-    "home_top_ad_1_title",
-    "home_top_ad_1_subtitle",
-    "home_top_ad_1_image",
-    "home_top_ad_1_link",
-    "home_top_ad_2_title",
-    "home_top_ad_2_subtitle",
-    "home_top_ad_2_image",
-    "home_top_ad_2_link",
-    "home_bottom_ad_title",
-    "home_bottom_ad_subtitle",
-    "home_bottom_ad_image",
-    "home_bottom_ad_link"
-  ];
-
-  const entries = Object.fromEntries(await Promise.all(contentKeys.map(async (key) => {
-    const cached = state.siteContentCache[key];
-    if (cached && typeof cached === "object") return [key, cached];
-
-    try {
-      const response = await api(`/api/content/${key}`);
-      if (response?.content) {
-        state.siteContentCache[key] = response.content;
-        return [key, response.content];
-      }
-    } catch (_error) {
-      // Keep values empty if content key is missing or unavailable.
-    }
-
-    return [key, null];
-  })));
-
-  const getValue = (key) => String(entries[key]?.content || "").trim();
-  const mapLegacyAd = (slot, titleKey, subtitleKey, imageKey, linkKey) => {
-    const normalized = normalizeHomeAd({
-      title: getValue(titleKey),
-      subtitle: getValue(subtitleKey),
-      image: getValue(imageKey),
-      link: getValue(linkKey)
-    });
-    return {
-      ...normalized,
-      slot,
-      isVisible: Boolean(normalized.title && normalized.image)
-    };
-  };
-
-  state.homeAds = {
-    top: [
-      mapLegacyAd("top_1", "home_top_ad_1_title", "home_top_ad_1_subtitle", "home_top_ad_1_image", "home_top_ad_1_link"),
-      mapLegacyAd("top_2", "home_top_ad_2_title", "home_top_ad_2_subtitle", "home_top_ad_2_image", "home_top_ad_2_link")
-    ],
-    bottom: mapLegacyAd("bottom", "home_bottom_ad_title", "home_bottom_ad_subtitle", "home_bottom_ad_image", "home_bottom_ad_link")
-  };
-
-  renderHomeAds();
-}
-
 async function loadHomeAds() {
   try {
     const response = await api(`/api/content/home-ads?t=${Date.now()}`);
@@ -1520,8 +1461,8 @@ async function loadHomeAds() {
     renderHomeAds();
     homeAdsLastLoadedAt = Date.now();
     return;
-  } catch (_error) {
-    await loadHomeAdsFromLegacyContentKeys();
+  } catch (error) {
+    console.debug("[home-ads] load failed:", error?.message || error);
     homeAdsLastLoadedAt = Date.now();
   }
 }

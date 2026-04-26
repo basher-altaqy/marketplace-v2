@@ -17225,15 +17225,15 @@ header.topbar.site-header {
   width: 100%;
   aspect-ratio: 8 / 3;
   min-height: 140px;
-  border: 1px solid rgba(148, 163, 184, 0.26);
-  border-radius: 20px;
+  border: 1px solid rgba(212, 175, 55, 0.28);
+  border-radius: 0;
   overflow: hidden;
   position: relative;
   display: block;
   text-align: right;
   background: #0f172a;
-  color: #fff;
-  box-shadow: 0 12px 28px rgba(15, 23, 42, 0.18);
+  color: #f8d875;
+  box-shadow: 0 10px 22px rgba(15, 23, 42, 0.12);
 }
 
 #homeView .home-ad-card.is-clickable {
@@ -17264,7 +17264,7 @@ header.topbar.site-header {
   content: "";
   position: absolute;
   inset: 0;
-  background: linear-gradient(120deg, rgba(15, 23, 42, 0.7), rgba(15, 23, 42, 0.35));
+  background: linear-gradient(120deg, rgba(15, 23, 42, 0.42), rgba(15, 23, 42, 0.16));
   z-index: 1;
 }
 
@@ -17283,16 +17283,27 @@ header.topbar.site-header {
   font-size: clamp(1rem, 2.7vw, 1.35rem);
   line-height: 1.28;
   font-weight: 800;
+  color: #f8d875;
+  text-shadow: 0 2px 12px rgba(0, 0, 0, 0.42);
 }
 
 #homeView .home-ad-subtitle {
   margin: 0;
   font-size: clamp(0.82rem, 2.2vw, 1rem);
   line-height: 1.5;
-  color: rgba(241, 245, 249, 0.95);
+  color: #ffe9a8;
+  text-shadow: 0 2px 10px rgba(0, 0, 0, 0.38);
 }
 
 @media (max-width: 900px) {
+  #homeView .home-ads-section {
+    width: 100vw;
+    margin-left: calc(50% - 50vw);
+    margin-right: calc(50% - 50vw);
+    padding-left: 0;
+    padding-right: 0;
+  }
+
   #homeView .home-ads-grid,
   #homeView .home-ads-single {
     max-width: 100%;
@@ -17301,7 +17312,9 @@ header.topbar.site-header {
   #homeView .home-ad-card {
     aspect-ratio: 16 / 7;
     min-height: 126px;
-    border-radius: 16px;
+    border-radius: 0;
+    border-left: 0;
+    border-right: 0;
   }
 
   #homeView .home-ad-body {
