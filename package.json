@@ -13,6 +13,7 @@
     "db:schema": "node scripts/db-bootstrap.js --schema-only",
     "seed:arabic-demo": "node scripts/seed-arabic-demo.js",
     "seed:products": "node scripts/seed-products.js",
+    "seed:run": "npm run seed:products",
     "start": "node server.js",
     "dev": "node server.js"
   },
